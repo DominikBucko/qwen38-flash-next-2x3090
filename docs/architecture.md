@@ -22,7 +22,7 @@ stored in FP8 rather than four bits.
    routed experts.
 2. Dense work and the static expert hot set run on the 3090s.
 3. Missed experts remain available through the host-resident UVA pool and the
-   eight-channel memory subsystem.
+   system-memory path.
 4. MTP proposes up to three tokens; the target model verifies them, preserving
    target sampling semantics while raising decode throughput when acceptance is
    high.

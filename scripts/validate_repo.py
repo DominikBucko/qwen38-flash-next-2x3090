@@ -62,6 +62,20 @@ def main() -> None:
     if not chart_path.is_file() or chart_path.read_text() != expected_chart:
         errors.append("hillclimb.svg is stale; run scripts/render_hillclimb.py")
 
+    agent_notes = (ROOT / "AGENTS.md").read_text()
+    matched_points = hillclimb_data["matched_decode"]["points"]
+    long_points = hillclimb_data["long_decode"]["points"]
+    agent_note_pins = {
+        "published model revision": lock["published_model"]["revision"],
+        "maximum context": str(lock["runtime"]["max_model_len"]),
+        "matched baseline": f"{matched_points[0]['tokens_per_second']:.2f}",
+        "matched endpoint": f"{matched_points[-1]['tokens_per_second']:.2f}",
+        "long-decode endpoint": f"{long_points[-1]['tokens_per_second']:.2f}",
+    }
+    for label, value in agent_note_pins.items():
+        if value not in agent_notes:
+            errors.append(f"AGENTS.md is missing current {label}: {value}")
+
     target = lock["checkpoint"]["target"]
     ple = lock["checkpoint"]["ple"]
     hybrid_builder = (ROOT / "scripts" / "build_intel_fp8ple_hybrid.py").read_text()
