@@ -2,112 +2,110 @@
 
 <h2 align="center">1,402 tok/s prefill · 135.2 tok/s decode</h2>
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
-<p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Hugging Face checkpoint</strong></a></p>
+<p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
-This repository runs Qwen3.8-Flash-Next at its full context length on two RTX
-3090 cards. The target uses Intel AutoRound W4A16 weights. The 51.2B-parameter
-n-gram table uses FP8. A compact INT4 MTP3 draft increases decode speed.
+Qwen3.8-Flash-Next does not fit in 48 GB of VRAM just because its backbone is
+INT4. The 51.2B-parameter PLE table is the awkward part. This build keeps the
+full expert set and an FP8 PLE table in system memory, caches active experts on
+the GPUs, and uses a small MTP3 draft to recover decode speed.
+
+The checkpoint combines Intel's AutoRound W4A16 target with RadixArk's FP8 PLE
+tensors. Every Intel tensor retained in the hybrid is copied as published, with
+no second quantization pass. The serving code is a pinned vLLM build plus the
+patches in this repo.
 
 ## Results
 
-| Test | Context | Result |
+| Workload | Shape | Speed |
 |---|---:|---:|
-| Peak prefill | 65,536 input tokens | **1,402 prompt tok/s** |
+| Prefill | 65,536 input tokens | **1,402 prompt tok/s** |
 | Full-context prefill | 262,016 input + 128 output | **1,275.6 prompt tok/s** |
-| Peak warmed decode | 128 input + 4,096 output | **135.2 output tok/s** |
-| Compact MTP repeat | 128 input + 4,096 output | **127.1–134.0 output tok/s** |
-| Decode after the 262K prompt | 262,016 input + 128 output | **54.5 output tok/s** |
-| Maximum tested sequence | Input + output | **262,144 tokens** |
+| Warm decode | 128 input + 4,096 output | **135.2 output tok/s** |
+| Warm decode, repeated | 128 input + 4,096 output | **127.1–134.0 output tok/s** |
+| Decode after a 262K prompt | 262,016 input + 128 output | **54.5 output tok/s** |
+| Longest tested sequence | Input + output | **262,144 tokens** |
 
-These are single-request results. Prefill and decode use different test shapes.
-The dotted break in the chart marks the change from 256 to 4,096 output tokens.
-Do not read 1,402 and 135.2 as results from one request.
+These are single-request measurements. Prefill and decode use different test
+shapes; 1,402 and 135.2 tok/s did not come from the same request. The chart marks
+the switch from a 256-token decode test to a 4,096-token test with a dotted line.
 
 ![Qwen3.8-Flash-Next performance hillclimb](docs/images/hillclimb.svg)
 
-## The hillclimb
+## What moved the needle
 
-The matched decode test used ten requests. Each request had 128 input tokens and
-256 output tokens. The result is the reciprocal of mean time per output token.
-This test improved from 32.8 to 80.1 tok/s. The workload stayed the same through
-all ten steps.
+The blue series is the useful comparison: every point uses 128 input tokens and
+256 output tokens. Decode rose from 32.83 to 80.08 tok/s on that fixed workload.
 
-1. **BF16 + MTP2: 32.83 tok/s.** This was the first vLLM baseline. It used the
-   BF16 backbone and a two-token MTP draft.
+1. **BF16 + MTP2 — 32.83 tok/s.** The original vLLM baseline.
 
-2. **INT4 group-128: 34.71 tok/s.** The INT4 backbone reduced active weight
-   traffic. Sensitive layers kept their source precision. Gain: 1.88 tok/s.
+2. **Intel W4A16 — 34.71 tok/s (+1.88).** INT4 cut backbone weight traffic.
+   Layers that Intel left in BF16 stayed in BF16.
 
-3. **More experts on the GPUs: 41.10 tok/s.** More routed experts stayed in GPU
-   memory. This reduced reads from system memory. Gain: 6.39 tok/s.
+3. **Larger GPU expert set — 41.10 tok/s (+6.39).** More routed experts stayed
+   in VRAM, so fewer token steps had to fetch an expert from system memory.
 
-4. **Pinned transfers and a host cache: 43.68 tok/s.** Pinned memory reduced
-   transfer cost. A chunked cache reduced the cost of an expert miss. Gain:
-   2.58 tok/s.
+4. **Pinned copies and a host cache — 43.68 tok/s (+2.58).** Pinned memory made
+   expert transfers cheaper. Chunk caching reduced the cost of a miss.
 
-5. **Static hot-96 cache: 49.81 tok/s.** The 96 most common experts stayed on
-   the GPUs. CUDA graphs captured this stable path. Gain: 6.13 tok/s.
+5. **Static hot-96 cache — 49.81 tok/s (+6.13).** The 96 busiest experts stayed
+   on the GPUs. The stable layout also made CUDA graph capture practical.
 
-6. **Mixed VMM hot-128: 57.37 tok/s.** The GPUs kept 128 hot experts. The full
-   expert set stayed available in system memory. Gain: 7.56 tok/s.
+6. **Mixed VMM hot-128 — 57.37 tok/s (+7.56).** The hot set grew to 128 experts
+   while the complete expert pool remained addressable in system memory.
 
-7. **Fused QSA: 59.97 tok/s.** The fused sparse-attention path reduced kernel
-   launch and block-selection work. Gain: 2.60 tok/s.
+7. **Fused QSA — 59.97 tok/s (+2.60).** Fusing sparse-attention selection cut
+   launch overhead and repeated block-selection work.
 
-8. **Humming + Marlin: 65.46 tok/s.** Humming ran the target MoE path. Marlin
-   ran the quantized MTP draft. Gain: 5.49 tok/s.
+8. **Humming + Marlin — 65.46 tok/s (+5.49).** Humming handled the target MoE
+   path; Marlin handled the quantized MTP draft.
 
-9. **Dynamic LRU-100: 78.73 tok/s.** A runtime LRU replaced the fixed expert
-   list. The cache adapted to the current token stream. Gain: 13.27 tok/s.
+9. **Dynamic LRU-100 — 78.73 tok/s (+13.27).** A runtime LRU beat the fixed hot
+   list because it followed the experts used by the current sequence.
 
-10. **Dynamic LRU-104: 80.08 tok/s.** Four more experts stayed resident. Gain:
-    1.35 tok/s. Total gain from the baseline: **2.44×**.
+10. **Dynamic LRU-104 — 80.08 tok/s (+1.35).** Four more resident experts gave
+    a small final gain. The matched test ended at **2.44×** its baseline speed.
 
-### MTP changed the long-decode result
+### Why the graph continues past 80 tok/s
 
-The long test used one warmed request with 128 input tokens and 4,096 output
-tokens.
+The gold points use a longer output, so they are not direct continuations of the
+blue comparison. On the warmed 128-input/4,096-output test:
 
-- Target-only decode reached 61.32 tok/s.
-- Fixed MTP3 reached 119.94 tok/s. This was a 95.6% gain.
-- Adaptive MTP3 reached 135.21 tok/s. This added another 12.7%.
+- Target only: 61.32 tok/s
+- Fixed MTP3: 119.94 tok/s
+- Adaptive MTP3: 135.21 tok/s
 
-The MTP draft proposes tokens. The target model checks each proposal. The draft
-changes speed and acceptance. It does not replace target verification.
+The longer run amortizes one-time request overhead. MTP accounts for most of the
+remaining gain: the draft proposes several tokens and the target checks them
+together. The target still verifies every accepted token.
 
-### Full context changed the balance
+### What 256K costs
 
-The 256K test needs more KV and attention work. The balanced profile reached
-1,275.6 prompt tok/s at 262,016 input tokens. Decode after this prompt reached
-54.5 tok/s. A static expert cache reached 1,629 prompt tok/s at the same boundary,
-but it was not the best balanced decode profile.
+With 262,016 input tokens already in the cache, decode falls to 54.5 tok/s. That
+is the price of the larger KV state and longer attention path. The balanced
+profile prefills the same prompt at 1,275.6 tok/s. A static expert cache reached
+1,629 prompt tok/s, but its decode behavior was worse, so it is not the default.
 
-## Model layout
+## Checkpoint layout
 
-| Part | Format |
+| Part | Storage format |
 |---|---|
 | Target backbone | Intel AutoRound W4A16, symmetric INT4 group-128 |
-| Sensitive target layers | BF16, unchanged |
-| 51.2B n-gram/PLE table | FP8 E4M3FN with the published scale |
-| MTP routed experts | INT4, symmetric group-32 |
-| Other MTP tensors | Source precision, unchanged |
+| Sensitive target layers | Original BF16 |
+| 51.2B-parameter PLE table | FP8 E4M3FN with the published scale |
+| MTP routed experts | Symmetric INT4 group-32 |
+| Other MTP tensors | Original source precision |
 | KV cache | BF16 |
 
-The target payload is 116.183 GiB. The compact MTP draft adds 3.855 GiB. The
-large size comes mainly from the FP8 n-gram table and the layers that stay in
-BF16. The target backbone is still W4A16.
+The target payload is 116.183 GiB. The compact MTP draft adds 3.855 GiB. Most of
+the surprising size comes from the PLE table and the tensors that remain BF16,
+not from an unquantized backbone.
 
-## Run the model
+## Run it
 
-Requirements:
+You need Linux, Docker, NVIDIA Container Toolkit, two 24 GB RTX 3090 cards, and
+128 GB of system memory.
 
-- Linux x86_64
-- 2× RTX 3090 with 24 GB on each card
-- 128 GB system memory
-- Docker and NVIDIA Container Toolkit
-- the published Hugging Face checkpoint
-
-Download the exact published revision:
+Download the pinned checkpoint revision:
 
 ```bash
 hf download albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
@@ -115,7 +113,7 @@ hf download albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
   --local-dir /models/qwen38-flash-next
 ```
 
-Start the server:
+Build and start the server:
 
 ```bash
 git clone https://github.com/DominikBucko/qwen38-flash-next-2x3090.git
@@ -129,12 +127,12 @@ make preflight
 make serve
 ```
 
-The OpenAI-compatible API listens on `http://127.0.0.1:8000/v1`.
+The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
 
-## Build the checkpoint from source
+## Rebuild the checkpoint
 
-The build uses full commit IDs. It does not quantize or repack Intel target
-tensors.
+The build scripts pin every upstream commit. They copy Intel's target tensors
+without another quantization or packing pass.
 
 ```bash
 ./scripts/download_sources.sh /models/qwen38-sources
@@ -142,43 +140,23 @@ make build-image
 ./scripts/assemble_with_docker.sh /models/qwen38-sources upload
 ```
 
-The result is `/models/qwen38-sources/upload`. Read
-[`docs/reproduce.md`](docs/reproduce.md) for the full procedure.
+The assembled HF tree is written to `/models/qwen38-sources/upload`. See
+[`docs/reproduce.md`](docs/reproduce.md) for source revisions, validation, and
+upload commands.
 
-## Publish the checkpoint to Hugging Face
+## Data and caveats
 
-Create a Hugging Face account and a write token. Do not put the token in this
-repository. Install the `hf` CLI on the machine that stores the 121 GB model:
-
-```bash
-curl -LsSf https://hf.co/cli/install.sh | bash -s
-hf auth login
-hf auth whoami
-```
-
-Then run:
-
-```bash
-./scripts/upload_hf.sh albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
-  /path/to/the/upload-tree
-```
-
-The upload uses Hugging Face Xet. You can run the command again after an
-interruption. After the upload, put the returned model commit in
-[`repro.lock.json`](repro.lock.json).
-
-## Benchmark notes
-
-The repository contains small result summaries. It does not contain private
-AgentBench tasks, hidden tests, oracle code, raw workspaces, or raw reasoning
-traces.
+The small JSON summaries are public:
 
 - [`benchmarks/serving-summary.json`](benchmarks/serving-summary.json)
 - [`benchmarks/hillclimb.json`](benchmarks/hillclimb.json)
 - [`benchmarks/agentbench-summary.json`](benchmarks/agentbench-summary.json)
 
+Private AgentBench fixtures, hidden tests, workspaces, and reasoning traces are
+not included. The default uses approximate QSA. Exact QSA is available as a
+slower comparison profile.
+
 ## License
 
-The runtime code uses Apache-2.0. The model weights are not part of this GitHub
-repository. The model keeps its upstream Qwen and third-party terms. Read
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+The runtime code is Apache-2.0. The model keeps the upstream Qwen and third-party
+terms listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
