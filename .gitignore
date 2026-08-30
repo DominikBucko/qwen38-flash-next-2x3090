@@ -4,11 +4,11 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
-dist/
-build/
-downloads/
-models/
-work/
+/dist/
+/build/
+/downloads/
+/models/
+/work/
 *.safetensors
 *.gguf
 *.bin
