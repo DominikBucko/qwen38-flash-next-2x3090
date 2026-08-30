@@ -2,6 +2,7 @@
 
 <h2 align="center">1,402 tok/s prefill · 135.2 tok/s decode</h2>
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
+<p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Hugging Face checkpoint</strong></a></p>
 
 This repository runs Qwen3.8-Flash-Next at its full context length on two RTX
 3090 cards. The target uses Intel AutoRound W4A16 weights. The 51.2B-parameter
@@ -106,11 +107,11 @@ Requirements:
 - Docker and NVIDIA Container Toolkit
 - the published Hugging Face checkpoint
 
-Download the exact model revision after it is published:
+Download the exact published revision:
 
 ```bash
-hf download OWNER/MODEL \
-  --revision FULL_HUGGING_FACE_COMMIT \
+hf download albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
+  --revision ef554143369a706525336f6b42a09094835dc077 \
   --local-dir /models/qwen38-flash-next
 ```
 
@@ -158,7 +159,7 @@ hf auth whoami
 Then run:
 
 ```bash
-./scripts/upload_hf.sh YOUR_HF_NAME/Qwen3.8-Flash-Next-W4A16-FP8PLE \
+./scripts/upload_hf.sh albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
   /path/to/the/upload-tree
 ```
 

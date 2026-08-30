@@ -69,7 +69,8 @@ directory it created beneath the supplied work directory.
 ## 4. Upload and cross-pin releases
 
 ```bash
-./scripts/upload_hf.sh OWNER/MODEL /models/qwen38-sources/upload
+./scripts/upload_hf.sh albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
+  /models/qwen38-sources/upload
 ```
 
 The script validates first, uses `hf upload`/Xet so interrupted uploads can be

@@ -44,8 +44,8 @@
     "system_memory": "128 GB"
   },
   "published_model": {
-    "repo": null,
-    "revision": null,
-    "note": "Fill these after the first Hugging Face upload and before tagging a GitHub release."
+    "repo": "albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE",
+    "revision": "ef554143369a706525336f6b42a09094835dc077",
+    "note": "Canonical checkpoint commit. Later documentation-only commits do not change model tensors."
   }
 }

@@ -49,12 +49,8 @@ release and the digest-pinned vLLM image recorded in `runtime/repro.lock.json`.
 The default profile uses BF16 KV, TP2+EP2, UVA expert offload, an 88-expert GPU
 hot cache, prefix caching, and MTP3. See `runtime/README.md`.
 
-Before publishing this model card, replace the revision placeholder with the
-Git commit or release tag that assembled the model:
-
-```text
-GitHub runtime: https://github.com/DominikBucko/qwen38-flash-next-2x3090 at FULL_COMMIT_OR_TAG
-```
+GitHub runtime: https://github.com/DominikBucko/qwen38-flash-next-2x3090 at
+release `v0.1.0`.
 
 ## Measured performance
 
