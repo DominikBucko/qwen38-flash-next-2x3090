@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "benchmark": "LBX AgentBench v0.2",
+  "publication_scope": "sanitized aggregate only; no fixtures, hidden assertions, oracle, raw traces, patches, or workspaces",
+  "caveat": "one trajectory per configuration; provisional and below the preferred three-run replication",
+  "main_run": {
+    "model": "Qwen3.8-Flash-Next Intel W4A16 + FP8 PLE + MTP3",
+    "reasoning_effort": "xhigh",
+    "max_steps": 32,
+    "response_token_cap": 16384,
+    "tasks": 15,
+    "strict_passes": 9,
+    "private_suite_passes": 11,
+    "mean_score": 97.60133333333333,
+    "clean_task_wall_seconds": 5549.653389,
+    "prompt_tokens": 3841609,
+    "completion_tokens": 196495,
+    "tool_calls": 313,
+    "normal_stop_finishes": 15
+  },
+  "qsa_ab_cache_fixed": {
+    "exact": {
+      "strict_passes": 9,
+      "private_suite_passes": 10,
+      "mean_score": 96.95333333333333,
+      "discovery_passes": 10,
+      "workflow_passes": 15
+    },
+    "approximate": {
+      "strict_passes": 7,
+      "private_suite_passes": 11,
+      "mean_score": 97.398,
+      "discovery_passes": 9,
+      "workflow_passes": 14
+    }
+  }
+}

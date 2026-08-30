@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "checkpoint": {
+    "base_model": "Qwen/Qwen3.8-Flash-Next",
+    "target": {
+      "repo": "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound",
+      "revision": "861536dda5bcb208376fc4cd879b2bf76bece9fe",
+      "format": "AutoRound GPTQ W4A16, symmetric INT4 group-128"
+    },
+    "ple": {
+      "repo": "RadixArk/Qwen3.8-Flash-Next-NVFP4",
+      "revision": "7b719225242aacd3dbd3f9407468c2ee9a9d2594",
+      "format": "FP8 E4M3FN with published global scale"
+    },
+    "assembled_target": {
+      "format": "qwen38-flash-next-intel-autoround-fp8-ple-v1",
+      "tensor_count": 222716,
+      "safetensors_files": 25,
+      "tensor_payload_bytes": 124750778874
+    },
+    "mtp": {
+      "format": "qwen38-flash-next-mtp-int4-g32-compact-v1",
+      "tensor_count": 4639,
+      "safetensors_files": 2,
+      "tensor_payload_bytes": 4139535872,
+      "routed_experts": "RTN INT4 symmetric group-32",
+      "other_tensors": "unchanged"
+    }
+  },
+  "runtime": {
+    "container_image": "vllm/vllm-openai:qwen38-flash-next@sha256:fc120ece0a388cc0aa1caad4a9f1cd92113484ab7ec2fd0efadd62585be05bf8",
+    "vllm_version": "0.1.dev20073+g8e685d198",
+    "humming_kernels_version": "0.1.12",
+    "kv_cache_dtype": "bfloat16",
+    "max_model_len": 262144,
+    "tensor_parallel_size": 2,
+    "expert_parallel": true,
+    "mtp_depth": 3,
+    "qsa_default": "approximate",
+    "prefix_caching": true
+  },
+  "validated_hardware": {
+    "gpus": "2x NVIDIA GeForce RTX 3090 24 GB",
+    "system_memory": "128 GB"
+  },
+  "published_model": {
+    "repo": null,
+    "revision": null,
+    "note": "Fill these after the first Hugging Face upload and before tagging a GitHub release."
+  }
+}

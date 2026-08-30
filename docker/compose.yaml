@@ -1,0 +1,24 @@
+services:
+  qwen38-flash-next:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: qwen38-flash-next-2x3090:locked
+    container_name: qwen38-flash-next
+    gpus: all
+    ipc: host
+    cap_add:
+      - SYS_PTRACE
+    shm_size: 16gb
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    ports:
+      - "127.0.0.1:${PORT:-8000}:${PORT:-8000}"
+    environment:
+      PORT: "${PORT:-8000}"
+      VLLM_QSA_EXACT_TOPK: "${VLLM_QSA_EXACT_TOPK:-0}"
+    volumes:
+      - "${MODEL_DIR:?Set MODEL_DIR}:/model:ro"
+    command: ["/model"]
+    restart: unless-stopped

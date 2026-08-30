@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: "Qwen3.8-Flash-Next 2x3090 reproducible runtime"
+message: "Cite this repository and the three upstream model repositories."
+type: software
+authors:
+  - family-names: "Bucko"
+    given-names: "Dominik"
+version: 1.0.0
+license: Apache-2.0
+repository-code: "https://github.com/DominikBucko/qwen38-flash-next-2x3090"

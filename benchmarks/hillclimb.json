@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "matched_decode": {
+    "workload": "10 requests; 128 input tokens and 256 output tokens per request",
+    "metric": "reciprocal mean TPOT, tokens per second",
+    "points": [
+      {
+        "name": "BF16 + MTP2",
+        "short_name": ["BF16", "MTP2"],
+        "tokens_per_second": 32.83,
+        "gain_tokens_per_second": null,
+        "description": "The first vLLM baseline used the BF16 backbone and a two-token MTP draft."
+      },
+      {
+        "name": "INT4 group-128",
+        "short_name": ["INT4", "G128"],
+        "tokens_per_second": 34.71,
+        "gain_tokens_per_second": 1.88,
+        "description": "The INT4 group-128 backbone reduced the active weight traffic. It kept sensitive layers at their source precision."
+      },
+      {
+        "name": "More GPU experts",
+        "short_name": ["More GPU", "experts"],
+        "tokens_per_second": 41.10,
+        "gain_tokens_per_second": 6.39,
+        "description": "More routed experts stayed on the GPUs. This reduced host-memory reads during decode."
+      },
+      {
+        "name": "Pinned H2D and host cache",
+        "short_name": ["Pinned H2D", "+ host cache"],
+        "tokens_per_second": 43.68,
+        "gain_tokens_per_second": 2.58,
+        "description": "Pinned transfers and a chunked host cache reduced the cost of an expert miss."
+      },
+      {
+        "name": "Static hot-96 cache",
+        "short_name": ["Static", "hot-96"],
+        "tokens_per_second": 49.81,
+        "gain_tokens_per_second": 6.13,
+        "description": "A fixed set kept 96 common experts on the GPUs. CUDA graphs could capture this stable path."
+      },
+      {
+        "name": "Mixed VMM hot-128",
+        "short_name": ["Mixed VMM", "hot-128"],
+        "tokens_per_second": 57.37,
+        "gain_tokens_per_second": 7.56,
+        "description": "A mixed virtual-memory path kept 128 hot experts resident. All other experts stayed available in system memory."
+      },
+      {
+        "name": "Fused QSA",
+        "short_name": ["Fused", "QSA"],
+        "tokens_per_second": 59.97,
+        "gain_tokens_per_second": 2.60,
+        "description": "The fused QSA path reduced sparse-attention launch and selection overhead."
+      },
+      {
+        "name": "Humming and Marlin",
+        "short_name": ["Humming", "+ Marlin"],
+        "tokens_per_second": 65.46,
+        "gain_tokens_per_second": 5.49,
+        "description": "Humming ran the target MoE path. Marlin ran the quantized MTP draft."
+      },
+      {
+        "name": "Dynamic LRU-100",
+        "short_name": ["Dynamic", "LRU-100"],
+        "tokens_per_second": 78.73,
+        "gain_tokens_per_second": 13.27,
+        "description": "A runtime LRU replaced the fixed expert list. It adapted the GPU cache to the current token stream."
+      },
+      {
+        "name": "Dynamic LRU-104",
+        "short_name": ["Dynamic", "LRU-104"],
+        "tokens_per_second": 80.08,
+        "gain_tokens_per_second": 1.35,
+        "description": "Four more resident experts gave the final gain in the matched short-decode test."
+      }
+    ]
+  },
+  "long_decode": {
+    "workload": "128 input tokens and 4096 output tokens; warmed single request",
+    "points": [
+      {"name": "No MTP", "tokens_per_second": 61.32},
+      {"name": "Fixed MTP3", "tokens_per_second": 119.94},
+      {"name": "Adaptive MTP3", "tokens_per_second": 135.21}
+    ]
+  },
+  "prefill_records": {
+    "metric": "prompt tokens per second",
+    "points": [
+      {"name": "65K peak", "tokens_per_second": 1402.0},
+      {"name": "256K balanced", "tokens_per_second": 1275.582989087546},
+      {"name": "256K static record", "tokens_per_second": 1629.0}
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Qwen3.8-Flash-Next 2x3090 container
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Copy this file to /etc/systemd/system only after replacing both paths and
+# creating the EnvironmentFile. Do not commit credentials to that file.
+EnvironmentFile=/etc/qwen38-flash-next.env
+WorkingDirectory=/opt/qwen38-flash-next-2x3090
+ExecStart=/opt/qwen38-flash-next-2x3090/scripts/docker_serve.sh
+ExecStop=/usr/bin/docker stop -t 45 qwen38-flash-next
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=1800
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

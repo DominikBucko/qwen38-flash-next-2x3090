@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "status": "single-request measured",
+  "hardware": "2x RTX 3090 24 GB, 128 GB system memory",
+  "runtime_profile": {
+    "max_model_len": 262144,
+    "tensor_parallel_size": 2,
+    "expert_parallel": true,
+    "kv_dtype": "bfloat16",
+    "prefix_caching": true,
+    "mtp_depth": 3,
+    "qsa": "approximate",
+    "hot_experts_per_layer": 88
+  },
+  "full_context": {
+    "input_tokens": 262016,
+    "output_tokens": 128,
+    "prefill_tokens_per_second": 1275.582989087546,
+    "time_to_first_token_seconds": 205.40882266502012,
+    "decode_tokens_per_second": 54.485273957545246,
+    "completed_without_stream_error": true
+  },
+  "warm_decode_probes": [
+    {
+      "input_tokens": 128,
+      "output_tokens": 4096,
+      "output_tokens_per_second": 133.9763176363099,
+      "mtp_acceptance_percent": 86.32778264680105,
+      "mtp_accepted_length": 3.5898334794040316
+    },
+    {
+      "input_tokens": 128,
+      "output_tokens": 4096,
+      "output_tokens_per_second": 127.10221995166586,
+      "mtp_acceptance_percent": 90.75757575757576,
+      "mtp_accepted_length": 3.7227272727272727
+    }
+  ]
+}
