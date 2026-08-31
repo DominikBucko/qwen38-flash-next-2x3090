@@ -4,14 +4,12 @@
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
-Qwen3.8-Flash-Next does not fit in 48 GB of VRAM just because its backbone is
-INT4. The 51.2B-parameter PLE table is the awkward part. This build keeps the
-full expert set and an FP8 PLE table in system memory, caches active experts on
-the GPUs, and uses a small MTP3 draft to recover decode speed.
+Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
+full expert set and an FP8 Ngram table in system memory, caches active (LRU) experts on
+the GPUs, and uses a small MTP3 drafter to recover decode speed.
 
-The checkpoint combines Intel's AutoRound W4A16 target with RadixArk's FP8 PLE
-tensors. Every Intel tensor retained in the hybrid is copied as published, with
-no second quantization pass. The serving code is a pinned vLLM build plus the
+The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE) combines Intel's AutoRound W4A16 target with FP8 PLE/ngram
+tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
 
 ## Results
@@ -31,9 +29,9 @@ the switch from a 256-token decode test to a 4,096-token test with a dotted line
 
 ![Qwen3.8-Flash-Next performance hillclimb](docs/images/hillclimb.svg)
 
-## What moved the needle
+## Speed hillclimb
 
-The blue series is the useful comparison: every point uses 128 input tokens and
+In the blue series, every point uses 128 input tokens and
 256 output tokens. Decode rose from 32.83 to 80.08 tok/s on that fixed workload.
 
 1. **BF16 + MTP2 — 32.83 tok/s.** The original vLLM baseline.
