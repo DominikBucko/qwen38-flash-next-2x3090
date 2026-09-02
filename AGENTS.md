@@ -178,6 +178,7 @@ The checked-in default is `configs/2x3090-128gb.env` plus
 MAX_MODEL_LEN=262144
 MAX_NUM_SEQS=1
 MAX_NUM_BATCHED_TOKENS=4096
+MAX_PARALLEL_LOADING_WORKERS=1
 KV_CACHE_MEMORY_BYTES=4429185024
 CPU_OFFLOAD_GB=30
 VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88
@@ -488,9 +489,12 @@ weight load with a 256K prefill.
 
 ### Host starts swapping
 
-Stop. Decode depends on resident PLE and expert pages. Swap turns predictable
-memory access into storage latency and invalidates performance results. Disk is
-not a supported overflow tier for this profile.
+Separate configured swap from active paging. A 128 GiB host needs NVMe-backed
+swap for load-time headroom; 32 GiB is the minimum recommendation and 48–64 GiB
+is safer. Swap remaining allocated after startup is not itself a failure.
+Sustained `vmstat` swap-in/swap-out during decode is a performance problem:
+PLE and cold expert accesses then wait on storage, so do not compare that run
+with the published numbers.
 
 ### Decode is much slower than expected
 

@@ -2,9 +2,12 @@
 
 ## 1. Hardware and host prerequisites
 
-The validated system has two RTX 3090 24 GB cards and 128 GB of system memory.
-The launch profile assumes two visible CUDA GPUs. It reserves approximately
-4.13 GiB of KV cache on each GPU for one 262,144-token sequence.
+The validated system has two RTX 3090 24 GB cards and 128 GB of system memory,
+plus NVMe-backed swap. Configure at least 32 GiB of swap before loading the
+checkpoint; 48–64 GiB is recommended. The launch profile assumes two visible
+CUDA GPUs and reserves approximately 4.13 GiB of KV cache on each GPU for one
+262,144-token sequence. See [`memory.md`](memory.md) before changing the cache
+or concurrency settings.
 
 Required software:
 
@@ -19,6 +22,10 @@ Run `make preflight` before the first image build. It is read-only. The runtime
 container receives `SYS_PTRACE` for cross-process PLE CUDA IPC. On hosts where
 that is insufficient, `kernel.yama.ptrace_scope=0` may be required temporarily;
 do not make that security relaxation persistent without reviewing it.
+
+The launcher passes `--max-parallel-loading-workers 1` to limit checkpoint
+staging pressure. This does not remove the need for swap: the target, PLE
+worker, pinned expert storage, and conversion buffers overlap during startup.
 
 ## 2. Immutable inputs
 

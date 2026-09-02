@@ -20,6 +20,12 @@ fi
 if [[ -r /proc/meminfo ]]; then
   mem_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
   [[ "$mem_kib" -ge 125000000 ]] || error "this profile needs approximately 128 GiB RAM"
+  swap_kib=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)
+  if [[ "$swap_kib" -lt 33554432 ]]; then
+    warn "only $((swap_kib / 1024 / 1024)) GiB swap is configured; use at least 32 GiB of fast NVMe swap (48-64 GiB recommended) for load-time headroom"
+  elif [[ "$swap_kib" -lt 50331648 ]]; then
+    warn "$((swap_kib / 1024 / 1024)) GiB swap is configured; 48-64 GiB gives safer load-time headroom"
+  fi
 fi
 
 if [[ -r /proc/sys/kernel/yama/ptrace_scope ]]; then

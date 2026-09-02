@@ -21,9 +21,10 @@ tags:
 # Qwen3.8-Flash-Next Intel W4A16 + FP8 PLE + MTP3
 
 This hybrid serves the native 262,144-token context on two 24 GiB Ampere GPUs
-with 128 GiB of host RAM. It keeps Intel's AutoRound target tensors exactly as
-published, replaces only the 102.4 GB BF16 n-gram/PLE table with RadixArk's FP8
-table, and adds a compact INT4 group-32 MTP draft under `runtime/mtp-int4-g32`.
+with 128 GiB of host RAM and NVMe-backed swap. It keeps Intel's AutoRound target
+tensors exactly as published, replaces only the 102.4 GB BF16 n-gram/PLE table
+with RadixArk's FP8 table, and adds a compact INT4 group-32 MTP draft under
+`runtime/mtp-int4-g32`.
 
 No target tensor was requantized or repacked during assembly.
 
@@ -51,6 +52,15 @@ hot cache, prefix caching, and MTP3. See `runtime/README.md`.
 
 GitHub runtime: https://github.com/DominikBucko/qwen38-flash-next-2x3090 at
 release `v0.1.0`.
+
+Configure at least 32 GiB of fast NVMe swap before loading the checkpoint;
+48–64 GiB is safer. The released hot cache is intentionally close to the 24 GiB
+VRAM limit. If the first prompt raises a CUDA OOM, lower
+`VLLM_WNA16_STATIC_HOT_CACHE_SIZE` from 88 to 86, then 84. Each removed slot
+saves roughly 116 MiB per GPU, with a decode-speed tradeoff. The
+[memory guide](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/docs/memory.md)
+documents host OOMs, KV-cache tuning, prefill transients, and two-client
+capacity.
 
 ## Measured performance
 

@@ -101,7 +101,9 @@ not from an unquantized backbone.
 ## Run it
 
 You need Linux, Docker, NVIDIA Container Toolkit, two 24 GB RTX 3090 cards, and
-128 GB of system memory.
+128 GB of system memory. Configure at least 32 GiB of swap on fast NVMe before
+the first launch; 48–64 GiB is safer. The loader can exceed physical RAM even
+though steady serving fits much more comfortably.
 
 Download the pinned checkpoint revision:
 
@@ -126,6 +128,23 @@ make serve
 ```
 
 The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
+
+### If it runs out of memory
+
+The checked-in profile is close to the VRAM limit. Check `free -h`,
+`swapon --show`, and `nvidia-smi` first. Then make one change at a time:
+
+1. Lower `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` from `88` to `86`, then `84` if
+   needed. Each removed slot saves roughly 116 MiB per GPU across the 48
+   layers, at the cost of more expert traffic from system memory.
+2. Lower `KV_CACHE_MEMORY_BYTES` from `4429185024` to `4294967296`. Keep this
+   only if the startup log still reports at least 262,144 KV-cache tokens.
+3. Lower `MAX_NUM_BATCHED_TOKENS` from `4096` to `2048`. This reduces peak
+   prefill temporaries but also reduces prefill throughput.
+
+Changing `MAX_MODEL_LEN` alone does not release the explicitly reserved KV
+allocation. For the full explanation, including two-client sizing, see
+[`docs/memory.md`](docs/memory.md).
 
 ## Rebuild the checkpoint
 

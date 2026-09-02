@@ -39,6 +39,7 @@ exec vllm serve "$model" \
   --language-model-only \
   --load-format safetensors \
   --safetensors-load-strategy lazy \
+  --max-parallel-loading-workers "$MAX_PARALLEL_LOADING_WORKERS" \
   --offload-backend uva \
   --cpu-offload-gb "$CPU_OFFLOAD_GB" \
   --cpu-offload-params experts \
