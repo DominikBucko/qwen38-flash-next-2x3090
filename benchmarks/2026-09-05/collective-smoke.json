@@ -1,0 +1,162 @@
+{
+  "cases": [
+    {
+      "expandable_segments": "True",
+      "returncode": 1,
+      "samples": [
+        {
+          "time": 1788571817.2049441,
+          "cpu_tctl_c": 61.875,
+          "gpus": [
+            [
+              57.0,
+              32.33,
+              300.0,
+              277.0,
+              0.0
+            ],
+            [
+              61.0,
+              29.59,
+              300.0,
+              15.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "time": 1788571819.2561905,
+          "cpu_tctl_c": 69.75,
+          "gpus": [
+            [
+              57.0,
+              43.65,
+              300.0,
+              280.0,
+              0.0
+            ],
+            [
+              61.0,
+              36.48,
+              300.0,
+              17.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "time": 1788571821.3513103,
+          "cpu_tctl_c": 71.875,
+          "gpus": [
+            [
+              57.0,
+              34.28,
+              300.0,
+              294.0,
+              0.0
+            ],
+            [
+              61.0,
+              30.96,
+              300.0,
+              32.0,
+              0.0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "expandable_segments": "False",
+      "returncode": 0,
+      "samples": [
+        {
+          "time": 1788571823.3935483,
+          "cpu_tctl_c": 69.875,
+          "gpus": [
+            [
+              60.0,
+              130.88,
+              300.0,
+              277.0,
+              0.0
+            ],
+            [
+              63.0,
+              132.46,
+              300.0,
+              15.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "time": 1788571825.4488435,
+          "cpu_tctl_c": 71.0,
+          "gpus": [
+            [
+              57.0,
+              42.03,
+              300.0,
+              280.0,
+              0.0
+            ],
+            [
+              61.0,
+              64.03,
+              300.0,
+              17.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "time": 1788571827.4938843,
+          "cpu_tctl_c": 72.5,
+          "gpus": [
+            [
+              57.0,
+              33.88,
+              300.0,
+              567.0,
+              0.0
+            ],
+            [
+              61.0,
+              31.51,
+              300.0,
+              345.0,
+              0.0
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "final": {
+    "time": 1788571829.5365944,
+    "cpu_tctl_c": 70.625,
+    "gpus": [
+      [
+        60.0,
+        131.22,
+        300.0,
+        277.0,
+        0.0
+      ],
+      [
+        63.0,
+        132.23,
+        300.0,
+        15.0,
+        0.0
+      ]
+    ]
+  },
+  "scope": "Two-rank BF16 vLLM custom all-reduce: eager exact sum and CUDA graph replay exact sum; direct bidirectional CUDA peer capability asserted. Not a model-quality or speed comparison.",
+  "script_sha256": "ecbd462290911662b2697b20e6071f1f81259672e1370aff54ec9228ac943fb2",
+  "outcomes": {
+    "expandable_segments_True": "CUDA graph IPC invalid argument at custom_all_reduce.cuh:164",
+    "expandable_segments_False": "PASS eager and CUDA-graph vLLM custom all-reduce"
+  }
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setup questions and tuning ideas
+    url: https://github.com/DominikBucko/qwen38-flash-next-2x3090/discussions
+    about: Ask the community about setup, hardware, or performance tuning.
+  - name: Memory and OOM guide
+    url: https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/docs/memory.md
+    about: Check RAM, swap, GPU cache sizing, and concurrent-request memory.

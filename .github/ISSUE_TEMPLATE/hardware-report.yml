@@ -1,0 +1,55 @@
+name: Hardware and benchmark report
+description: Share a working setup, benchmark, or failed attempt on 3090, 4090, or other hardware.
+title: "[Hardware] GPU setup and result"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Independent reproductions are welcome. Short prompts, full-context runs,
+        and failed attempts are all useful. Use public prompts and redact secrets
+        and private paths from logs. A community report is not a support guarantee.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - Started and completed requests
+        - Completed a 262,144-token sequence
+        - Failed to start or complete a request
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware and system
+      description: GPU models/count/VRAM, CPU, RAM capacity/channels/speed, OS, NVIDIA driver, swap, PCIe topology.
+      placeholder: "2x RTX 3090 24 GB; CPU; RAM; driver; NVMe swap; nvidia-smi topo -m"
+    validations:
+      required: true
+  - type: textarea
+    id: revision
+    attributes:
+      label: Runtime and settings
+      description: Git commit, checkpoint revision, image digest, and environment overrides. Redact private paths.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload and protocol
+      description: Actual input/output token counts, sampling, concurrency, warmups, repeats, prefix-cache state, and public prompt or benchmark command.
+    validations:
+      required: true
+  - type: textarea
+    id: results
+    attributes:
+      label: Results or failure
+      description: TTFT, prompt/output throughput separately, completed token counts, MTP acceptance, peak VRAM/RAM, active swapping, and any error. Attach sanitized JSON/logs if available.
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: What helped or what did you try?
+      description: Include settings that failed or lost performance as well as the winning configuration.

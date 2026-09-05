@@ -5,6 +5,7 @@ type: software
 authors:
   - family-names: "Bucko"
     given-names: "Dominik"
-version: 1.0.0
+version: 0.2.0
+date-released: 2026-09-05
 license: Apache-2.0
 repository-code: "https://github.com/DominikBucko/qwen38-flash-next-2x3090"

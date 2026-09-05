@@ -1,0 +1,41 @@
+{
+  "checked_at_unix": 1788574283.2674105,
+  "gpus": [
+    {
+      "index": 0.0,
+      "temperature_c": 45.0,
+      "power_limit_w": 300.0,
+      "memory_used_mib": 277.0,
+      "utilization_percent": 0.0
+    },
+    {
+      "index": 1.0,
+      "temperature_c": 43.0,
+      "power_limit_w": 300.0,
+      "memory_used_mib": 15.0,
+      "utilization_percent": 0.0
+    }
+  ],
+  "services": {
+    "netdata": "active",
+    "coolercontrold": "active",
+    "cockpit.socket": "active",
+    "p620-gpu-cap.service": "active",
+    "p620-gpu1-hybrid-fan.service": "active"
+  },
+  "remaining_swap": [
+    {
+      "name": "/swap.img",
+      "type": "file",
+      "size_kib": 8388604,
+      "used_kib": 310968,
+      "priority": -1
+    }
+  ],
+  "temporary_swap_removed": true,
+  "experiment_server_processes_stopped": true,
+  "cpu_cap_w": 280,
+  "cpu_profile": "performance",
+  "lenovo_fan_step": 3,
+  "tuning_confirmation": "p620-tune status: original 280 W/performance, fan step 3; GPU caps 300 W. No persistent tuning settings were changed."
+}
