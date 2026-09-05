@@ -13,6 +13,7 @@
     "hot_experts_per_layer": 88
   },
   "full_context": {
+    "measurement_scope": "262,144-token boundary probe; 128 output tokens do not characterize sustained long-context decode",
     "input_tokens": 262016,
     "output_tokens": 128,
     "prefill_tokens_per_second": 1275.582989087546,

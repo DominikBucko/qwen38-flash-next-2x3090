@@ -1,0 +1,49 @@
+name: Bug or OOM report
+description: Report a startup failure, CUDA or host OOM, incorrect output, or runtime regression.
+title: "[Bug] Brief description"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For OOMs, start with docs/memory.md. Please redact API keys, private
+        prompts, machine identifiers, and personal paths from attached logs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Expected behavior, actual behavior, and the smallest command or public request that reproduces it.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Hardware, versions, and settings
+      description: GPUs, CPU, RAM/swap, OS, driver, runtime Git commit, model revision, and environment overrides.
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Failure stage
+      options:
+        - Build or preflight
+        - Loading weights or PLE startup
+        - CUDA graph capture or server startup
+        - First request or prefill
+        - Decode or later requests
+        - Incorrect output or another problem
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized error and memory evidence
+      description: Include the error with surrounding lines, free -h, swapon --show, nvidia-smi, and the GPU KV cache size line if available.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: attempts
+    attributes:
+      label: Fixes already attempted
+      description: Settings changed and the outcome, including whether a previous runtime commit worked.

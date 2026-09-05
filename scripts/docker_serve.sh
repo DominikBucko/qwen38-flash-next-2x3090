@@ -6,6 +6,16 @@ model_dir=${MODEL_DIR:?Set MODEL_DIR to the assembled/downloaded model directory
 port=${PORT:-8000}
 qsa_exact=${VLLM_QSA_EXACT_TOPK:-0}
 
+if [[ ${DISABLE_CUSTOM_ALL_REDUCE+x} ]]; then
+  case "$DISABLE_CUSTOM_ALL_REDUCE" in
+    0|1) ;;
+    *)
+      echo "DISABLE_CUSTOM_ALL_REDUCE must be 0 or 1" >&2
+      exit 2
+      ;;
+  esac
+fi
+
 docker_env=(
   -e "PORT=$port"
   -e "VLLM_QSA_EXACT_TOPK=$qsa_exact"
@@ -22,9 +32,11 @@ for name in \
   VLLM_WNA16_STATIC_HOT_CACHE_SIZE \
   VLLM_WNA16_STATIC_HOT_CACHE_MAX_TOKENS \
   VLLM_PREFIX_CACHE_RETENTION_INTERVAL \
+  DISABLE_CUSTOM_ALL_REDUCE \
+  PYTORCH_CUDA_ALLOC_CONF \
   MTP_DEPTH
 do
-  if [[ -v "$name" ]]; then
+  if declare -p "$name" &>/dev/null; then
     docker_env+=(-e "$name=${!name}")
   fi
 done

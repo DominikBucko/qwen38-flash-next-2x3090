@@ -9,6 +9,7 @@ RUN python3 /opt/qwen38/runtime/install_overlay.py /opt/qwen38/runtime/vllm-over
 COPY configs/2x3090-128gb.env /opt/qwen38/configs/2x3090-128gb.env
 COPY configs/static_hot_cache_rankings.json /workspace/static_hot_cache_rankings.json
 COPY scripts/serve-container.sh /usr/local/bin/qwen38-serve
+COPY scripts/check_custom_all_reduce.py /opt/qwen38/scripts/check_custom_all_reduce.py
 COPY tests/test_qsa_exact_topk_cpu.py /opt/qwen38/tests/test_qsa_exact_topk_cpu.py
 RUN chmod 0755 /usr/local/bin/qwen38-serve
 

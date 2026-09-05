@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-05",
+  "cpu": "AMD Ryzen Threadripper PRO 5975WX,32cores/64threads",
+  "memory_modules": "8x16GB DDR4-3200, eight populated memory channels",
+  "memtotal_kib": 129691056,
+  "gpu": "2xNVIDIA RTX3090,24576MiB each",
+  "gpu_power_limit_w_each": 300,
+  "kernel": "7.0.0-30-generic",
+  "driver": "595.84",
+  "pcie": "PCIe4.0x16 on both GPUs under load; PHB interconnect; no NVLink",
+  "cuda_peer_access": {
+    "0_to_1": true,
+    "1_to_0": true
+  },
+  "driver_note": "Peer access was verified on this host; do not assume every stock 3090 driver provides it.",
+  "runtime": "Clean vendor vLLM0.1.dev20073+g8e685d198 plus the public27-file overlay; dependencies supplied by an existing venv via isolated PYTHONPATH, not a fresh Docker build",
+  "packages": {
+    "torch": "2.13.0",
+    "transformers": "5.16.1",
+    "humming-kernels": "0.1.12",
+    "triton": "3.7.1",
+    "compressed-tensors": "0.17.0",
+    "safetensors": "0.8.0"
+  },
+  "profile": {
+    "max_model_len": 262144,
+    "max_num_seqs": 1,
+    "max_num_batched_tokens": 4096,
+    "kv_cache_memory_bytes": 4429185024,
+    "hot_experts_per_layer": 86,
+    "mtp_depth": 3,
+    "qsa": "approximate",
+    "custom_all_reduce_disabled": true
+  },
+  "launch_deviations": [
+    "native isolated PYTHONPATH instead of Docker",
+    "localhost port18088",
+    "memlock unlimited scoped to launcher",
+    "64GiB temporary swap in addition to existing8GiB",
+    "Hot-expert cache reduced from88 to86 after full-context KV allocation OOM at88",
+    "Scoped CUDA library search path for existing NVRTC builtins"
+  ],
+  "hashes": {
+    "repro.lock.json": "f39ca15f3d853c10fd50d622545c0905a8c77ab18332f3acf53f9dd73a5d73e5",
+    "overlay_manifest": "759221472b1eaf563dc27c6e67bb63e9ec482fc969033bdcf4a16308dd1ed0e0",
+    "rankings": "1230c61ac2b725b1c3ecd0888d08b12743c5484639fc010fa5643fc4945cd8dc",
+    "native_launcher": "768503a8550192914d91d247b309e5ce74879a80185a895743f8d7cd27f104f1",
+    "benchmark_client": "9aefbe5eaccc682a6340b2df8a15615ec5452d8596263f5571782920e185898b"
+  },
+  "notes": [
+    "CUDA peer capability remains enabled; vLLM custom all-reduce disabled after CUDA IPC/graph failure during startup."
+  ]
+}

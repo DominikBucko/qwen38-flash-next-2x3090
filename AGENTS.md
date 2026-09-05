@@ -26,13 +26,27 @@ When a verified result changes, update the machine-readable benchmark JSON, the
 generated graph, this file, and any public claim in the same commit. Do not let
 an old explanation survive after its underlying flag or workload changes.
 
-Keep these benchmark shapes separate:
+Keep the September 5 candidate measurements separate from the historical
+release and hillclimb shapes:
+
+| Candidate claim | Request shape and run policy | Result |
+|---|---|---:|
+| Near-full-context chat | `repo-chat`, 258,048 input + 4,096 output, 3 measured, no explicit warmup | 75.636 API-observed output tok/s, reciprocal-mean TPOT |
+| Short chat | `repo-chat`, 128 input + 4,096 output, 1 warmup + 3 measured | 77.2845 API-observed output tok/s, reciprocal-mean TPOT |
+
+The long per-run rates were 74.030749, 76.707158, and 76.224624 tok/s;
+TTFT was 215.128, 211.059, and 211.228 seconds. The short run range was
+74.7459–79.7072 tok/s. The candidate used hot-cache 84, bidirectional CUDA P2P,
+custom all-reduce enabled, and expandable segments disabled. The default
+88/disabled/True profile remains unchanged.
+
+Historical benchmark shapes:
 
 | Claim | Request shape | Result |
 |---|---:|---:|
 | Peak prefill | 65,536 input tokens | 1,402 prompt tok/s |
 | Balanced full-context prefill | 262,016 input + 128 output | 1,275.583 prompt tok/s |
-| Decode after full context | 262,016 input + 128 output | 54.485 output tok/s |
+| Full-context boundary probe | 262,016 input + 128 output | 54.485 output tok/s |
 | Matched short-decode endpoint | 128 input + 256 output, 10 requests | 80.08 output tok/s |
 | Peak warmed long decode | 128 input + 4,096 output, one request | 135.21 output tok/s |
 
@@ -41,6 +55,12 @@ The 1,402 prefill and 135.21 decode figures are not from the same request. The
 decode amortizes one-time request overhead and gives MTP much more time to pay
 for itself. Preserve this distinction in every chart, report, and regression
 test.
+
+All 27 weight files used by the September 5 probes matched the published
+SHA-256 manifest for canonical tensor revision
+`ef554143369a706525336f6b42a09094835dc077`. The native boundary was a clean
+pinned vendor vLLM plus the public overlay using existing dependencies, not a
+fresh Docker build.
 
 ## The model is large for a reason
 
@@ -187,7 +207,22 @@ VLLM_PREFIX_CACHE_RETENTION_INTERVAL=1600
 VLLM_PLE_OFFLOAD_READY_TIMEOUT=1200
 MTP_DEPTH=3
 VLLM_QSA_EXACT_TOPK=0
+DISABLE_CUSTOM_ALL_REDUCE=1
 ```
+
+The measured September 5 candidate overrides were:
+
+```text
+VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84
+DISABLE_CUSTOM_ALL_REDUCE=0
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False
+```
+
+They are an experimental measured profile, not a change to the checked-in
+defaults above. The PHB host exposed CUDA P2P in both directions. The candidate
+completed three exact-count 258,048-input/4,096-output chat streams. Four
+recoverable allocator warnings appeared during the first long prefill, with no
+stream failures.
 
 `CPU_OFFLOAD_GB=30` is not the total host-memory footprint. The PLE worker owns
 its large table separately, and the expert tier has additional storage and
@@ -205,8 +240,16 @@ Important launch choices:
 - Prefix caching uses `--mamba-cache-mode align`.
 - CUDA graphs are limited to `FULL_DECODE_ONLY`.
 - Async scheduling is disabled.
-- Custom all-reduce is disabled because CUDA peer access was unavailable on the
-  validated two-card topology.
+- Custom all-reduce defaults to disabled because CUDA peer access was unavailable
+  on the original validated topology. `DISABLE_CUSTOM_ALL_REDUCE=0` exposes an
+  experimental custom path. It needs bidirectional CUDA peer access and an
+  IPC-compatible allocator: the pinned custom path fails after graph capture
+  with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`. Test the allocator
+  override and full model before recommending it. The September 5 candidate
+  passed the full-model long probe with expandable segments disabled, but no
+  matched same-prompt custom-all-reduce A/B exists. Disabling the custom
+  collective does not disable CUDA peer access in the driver or force NCCL to
+  use host staging.
 
 Do not tune one of these as if it were independent. Raising the hot-cache size
 takes VRAM away from KV and transient prefill buffers. Raising the batched-token
@@ -341,9 +384,18 @@ prefill: 1,275.583 prompt tok/s
 decode after prompt: 54.485 output tok/s
 ```
 
-The lower decode rate is real. At 256K, more KV and sparse-attention state sit on
-the critical path. Do not use the 135 tok/s short-prompt number to predict decode
-after a full prompt.
+This is a measured 128-output boundary probe, not sustained long-context decode.
+It mixes a short generation window with post-prefill state. At 256K, more KV
+and sparse-attention state sit on the critical path, but this one short probe
+does not isolate those costs. Use a longer output and repeated runs to measure
+sustained generation; do not predict it from the 135 tok/s short-prompt figure.
+
+The September 5 candidate directly measured the longer window: three
+`repo-chat` requests of 258,048 input + 4,096 output produced 74.030749,
+76.707158, and 76.224624 API-observed tok/s, for a 75.636073 reciprocal-mean
+aggregate. There was no explicit warmup. TTFT was 215.128, 211.059, and 211.228
+seconds. Treat this separately from both the historical 128-output boundary
+probe and the historical warmed 128-input/4,096-output result.
 
 A static expert profile reached 1,629 prompt tok/s at the same context boundary,
 but it was not the best combined prefill/decode configuration. The released
@@ -427,7 +479,7 @@ code, raw traces, patches, or final workspaces.
 1. Start from the pinned image, checkpoint revision, and released environment.
 2. Change one mechanism at a time.
 3. Record every environment variable and serving flag.
-4. Warm the model before measuring decode.
+4. Record the explicit warmup policy and keep it identical in comparisons.
 5. Use the 128-input/256-output matched workload for hillclimb comparisons.
 6. Use 128-input/4,096-output only for long-decode and MTP studies.
 7. Record MTP acceptance and accepted length with decode throughput.
@@ -442,6 +494,43 @@ When a change improves short decode, ask whether it consumed VRAM needed by the
 full-context cache. When it improves prefill, ask whether post-prefill decode
 regressed. When it improves MTP throughput, inspect acceptance. When it changes
 QSA, cache state, PLE precision, or target weights, run a quality evaluation.
+
+## Public benchmark client
+
+`scripts/benchmark_serving.py` records new synthetic streaming measurements; it
+does not reconstruct the private historical prompt fixtures. `repeated-seed`
+uses a short periodic text, while `repo-code` uses sorted public runtime-overlay
+Python files and records their hashes and token IDs. `repo-chat` adds a public
+tutorial instruction and obtains chat-template wrappers from the server's
+full-source and empty-source tokenizations; only the source interior is resized.
+At 128 tokens only a small source prefix fits. Inspect captured output: raw
+short-code probes showed repetition and must remain diagnostic evidence.
+Always name the workload.
+A repetitive prompt can favor PLE and expert-cache locality and is not a
+representative application or quality benchmark.
+
+The client requires exact server usage, exact streamed output-token counts, a
+length finish, and a complete SSE stream. It reports API-observed TTFT and
+post-first-chunk decode timing; MTP and SSE buffering mean those are not kernel
+latencies. Optional output capture happens after timing stops. Compare repeated
+runs using reciprocal mean TPOT; retain per-run timings and output-token hashes.
+Unique cache salts isolate prefix-block reuse, not the LRU, PLE pages, graphs,
+or other warm state. The embedded lock is expected repository provenance, not
+proof of what a remote endpoint loaded; record the actual runtime separately.
+
+Use 258,048 input + 4,096 output to study sustained generation close to the
+262,144-token limit. Preserve the original 262,016 + 128 boundary probe as
+capacity evidence, and do not label its short output rate as sustained
+long-context performance. Keep new workload results separate from the old
+hillclimb unless request content and complete test conditions are matched.
+
+The published September 5 bundle is under `benchmarks/2026-09-05/`. Completion
+counts include reasoning and control tokens. Forced 4,096-token chat captures
+can end during reasoning, so these probes do not establish answer quality. A
+separate hot-cache-86 raw `repo-code` diagnostic with custom all-reduce disabled
+and expandable segments enabled measured 78.8238 tok/s at 258,048 + 4,096.
+Because the prompt and profile differ, it is not promotional evidence or a
+controlled custom-all-reduce speed comparison.
 
 ## Startup and validation sequence
 
@@ -459,7 +548,9 @@ Before publishing source changes:
 ```bash
 make validate
 python scripts/check_release_ready.py
-bash -n scripts/*.sh
+for script in scripts/*.sh; do
+  bash -n "$script"
+done
 ```
 
 CI can check source syntax, overlay hashes, lock consistency, accidental model
@@ -557,8 +648,9 @@ These are experiments, not promised wins:
    AgentBench trajectories per mode.
 5. Measure prefix-cache hit rate and latency on realistic multi-turn agent
    transcripts rather than repeated synthetic prompts.
-6. Revisit collectives only on a topology where CUDA peer access is actually
-   available. Do not assume an x16 link implies CUDA P2P.
+6. Run a controlled same-prompt hot-cache-84 comparison with custom all-reduce
+   enabled and disabled before attributing a speed change to the collective.
+   The current raw baseline used a different prompt and profile.
 7. Profile host expert misses and PLE lookup separately. Both touch system
    memory, but they need different fixes.
 8. Evaluate any lower-precision KV or PLE variant as a new quality/performance

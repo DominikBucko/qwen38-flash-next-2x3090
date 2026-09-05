@@ -1,0 +1,1231 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-05",
+  "measurement": "API-observed streaming generation; all completion tokens including reasoning; reciprocal mean post-first-chunk TPOT",
+  "comparison_scope": "Prompt and profile differ between suites; no isolated custom-all-reduce speedup or comparison against historical fixtures is claimed.",
+  "startup_attempts": [
+    {
+      "hot_experts": 88,
+      "custom_all_reduce": true,
+      "expandable_segments": true,
+      "outcome": "KV allocation OOM on GPU0"
+    },
+    {
+      "hot_experts": 86,
+      "custom_all_reduce": true,
+      "expandable_segments": true,
+      "outcome": "First native graph compile could not locate NVRTC builtins; corrected the experiment-local library path"
+    },
+    {
+      "hot_experts": 86,
+      "custom_all_reduce": true,
+      "expandable_segments": true,
+      "outcome": "CUDA graph IPC failed at custom_all_reduce.cuh:164 after fixing the library path"
+    }
+  ],
+  "suites": [
+    {
+      "id": "baseline-hot86",
+      "environment": "baseline-hot86/environment.json",
+      "profile": {
+        "max_model_len": 262144,
+        "max_num_seqs": 1,
+        "max_num_batched_tokens": 4096,
+        "kv_cache_memory_bytes": 4429185024,
+        "hot_experts_per_layer": 86,
+        "mtp_depth": 3,
+        "qsa": "approximate",
+        "custom_all_reduce_disabled": true
+      },
+      "cases": [
+        {
+          "id": "short-code",
+          "raw_report": "baseline-hot86/short-code.json.gz",
+          "raw_json_sha256": "76fb923187bd7a061fe84739d87dffe575d506b3ba1e69431a14bca66935153e",
+          "client_script_sha256": "9aefbe5eaccc682a6340b2df8a15615ec5452d8596263f5571782920e185898b",
+          "prompt_style": "repo-code",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "warmup_runs": 1,
+          "measured_runs": 3,
+          "aggregate": {
+            "reciprocal_mean_api_observed_tpot_tokens_per_second": 102.56058354258045,
+            "api_observed_decode_rate_min_tokens_per_second": 83.20480844211984,
+            "api_observed_decode_rate_max_tokens_per_second": 130.58469720188762,
+            "ttft_min_seconds": 0.7730020139997578,
+            "ttft_max_seconds": 0.7785039239997786
+          },
+          "mtp_metrics": {
+            "available": true,
+            "scope": "all case requests between snapshots, including warmups",
+            "before_file": "short-code.metrics-before.txt",
+            "after_file": "short-code.metrics-after.txt",
+            "deltas": {
+              "drafts": 4902.0,
+              "draft_tokens": 14706.0,
+              "accepted_draft_tokens": 11485.0
+            },
+            "accepted_draft_token_percent": 78.09737522099823,
+            "accepted_draft_tokens_per_draft": 2.342921256629947,
+            "warnings": []
+          },
+          "runs": [
+            {
+              "index": 0,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 128,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 128,
+                "total_tokens": 4224,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "7028bd976dfcd8b1c4908476c5a0e0ca3153dcb8df3d56f27c84a3d6d24cfb4c",
+              "output_token_ids_sha256": "092b009a31da5b425c1de3dd017a6448fabf6672169bd4a923aa9d822a4621fb",
+              "ttft_seconds": 0.7734636469995166,
+              "api_observed_tpot_seconds": 0.00957460230671571,
+              "api_observed_decode_estimate_tokens_per_second": 104.4429802894885,
+              "request_duration_seconds": 39.981602402000135,
+              "telemetry": {
+                "samples_inside_run": 19,
+                "peak_cpu_tctl_c": 75.875,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 70.0,
+                    "peak_power_w": 299.06
+                  },
+                  "1": {
+                    "peak_temperature_c": 75.0,
+                    "peak_power_w": 299.3
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788570828.5884824,
+                  "end_sample_time": 1788570869.7263162,
+                  "pswpin_pages_delta": 15371,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "short-code.measured-0.output.txt",
+                "sha256": "7028bd976dfcd8b1c4908476c5a0e0ca3153dcb8df3d56f27c84a3d6d24cfb4c",
+                "matches_reported_output_text_sha256": true,
+                "characters": 7188,
+                "words": 623,
+                "nonempty_lines": 168,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.07888146911519199,
+                "repeated_8_word_window_fraction": 0.14935064935064934,
+                "most_repeated_nonempty_line": {
+                  "count": 43,
+                  "preview": "IntWna16MoeShardType,"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 567,
+                  "unit_characters": 1,
+                  "repetitions": 567,
+                  "unit_preview": "\n"
+                },
+                "assessment": [
+                  "long repeated whitespace run detected",
+                  "raw synthetic continuation only; this is not a correctness or model-quality score",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 1,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 128,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 128,
+                "total_tokens": 4224,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "660656823e787726b73b2ebecffc16e12947a43a66dd6481df84e43f338fda34",
+              "output_token_ids_sha256": "94ed1f968c7cfef51c835bdd1a9a599281ac6b615d4fe545ce64e8a812cfd31f",
+              "ttft_seconds": 0.7730020139997578,
+              "api_observed_tpot_seconds": 0.012018536172649624,
+              "api_observed_decode_estimate_tokens_per_second": 83.20480844211984,
+              "request_duration_seconds": 49.989065850999395,
+              "telemetry": {
+                "samples_inside_run": 25,
+                "peak_cpu_tctl_c": 76.25,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 71.0,
+                    "peak_power_w": 298.25
+                  },
+                  "1": {
+                    "peak_temperature_c": 77.0,
+                    "peak_power_w": 298.65
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788570867.533939,
+                  "end_sample_time": 1788570921.0489357,
+                  "pswpin_pages_delta": 37204,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "short-code.measured-1.output.txt",
+                "sha256": "660656823e787726b73b2ebecffc16e12947a43a66dd6481df84e43f338fda34",
+                "matches_reported_output_text_sha256": true,
+                "characters": 11347,
+                "words": 1043,
+                "nonempty_lines": 350,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.05791505791505792,
+                "most_repeated_nonempty_line": {
+                  "count": 18,
+                  "preview": ")"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 56,
+                  "unit_characters": 28,
+                  "repetitions": 2,
+                  "unit_preview": "_moe_quant_config,\n    nvfp4"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "raw synthetic continuation only; this is not a correctness or model-quality score",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 2,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 128,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 128,
+                "total_tokens": 4224,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "358b0cc565dd186127bd2ac0e7dc07e2503483b5b8db2e411259b1a0a7bed62d",
+              "output_token_ids_sha256": "39e3f4cfc1cb5d68ef48463dce2cb6d4156d444d99b78fea95425f29d325f56a",
+              "ttft_seconds": 0.7785039239997786,
+              "api_observed_tpot_seconds": 0.007657865136019513,
+              "api_observed_decode_estimate_tokens_per_second": 130.58469720188762,
+              "request_duration_seconds": 32.13759996799945,
+              "telemetry": {
+                "samples_inside_run": 15,
+                "peak_cpu_tctl_c": 75.625,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 72.0,
+                    "peak_power_w": 298.91
+                  },
+                  "1": {
+                    "peak_temperature_c": 78.0,
+                    "peak_power_w": 299.6
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788570918.9968905,
+                  "end_sample_time": 1788570951.7744272,
+                  "pswpin_pages_delta": 4943,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "short-code.measured-2.output.txt",
+                "sha256": "358b0cc565dd186127bd2ac0e7dc07e2503483b5b8db2e411259b1a0a7bed62d",
+                "matches_reported_output_text_sha256": true,
+                "characters": 12646,
+                "words": 201,
+                "nonempty_lines": 129,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.0,
+                "most_repeated_nonempty_line": {
+                  "count": 5,
+                  "preview": ")"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 6972,
+                  "unit_characters": 3,
+                  "repetitions": 2324,
+                  "unit_preview": "Val"
+                },
+                "assessment": [
+                  "long immediately repeated substring detected",
+                  "raw synthetic continuation only; this is not a correctness or model-quality score",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            }
+          ],
+          "source_coverage": {
+            "style": "repo-code",
+            "requested_input_tokens": 128,
+            "source_token_count": 243328,
+            "observed_source_token_ids": 243328,
+            "declared_source_count_matches_stored_ids": true,
+            "complete_source_cycles_in_prompt": 0,
+            "source_prefix_tokens_after_complete_cycles": 128,
+            "source_coverage_basis": "derived from raw-prompt input and source token counts",
+            "source_tokens_in_prompt": 128,
+            "fixed_prefix_tokens": null,
+            "fixed_suffix_tokens": null,
+            "chat_wrapper_tokens": null,
+            "prompt_token_accounting_reconciles": true,
+            "declared_includes_complete_source_corpus": null,
+            "declared_complete_source_matches_cycles": null,
+            "source_text_sha256": "ba7704ed6f3b0bc1df0922ff0a30aff0ebeb9c3e90af807deeeae7f79502f986",
+            "source_file_count": 27,
+            "first_source_path": "runtime/vllm-overlay/model_executor/layers/fused_moe/oracle/int_wna16.py",
+            "last_source_path": "runtime/vllm-overlay/v1/worker/gpu_worker.py",
+            "contains_imported_private_data": false,
+            "caveats": [
+              "raw completion has no task instruction and cannot establish answer quality",
+              "add_special_tokens=false; this is a synthetic completion workload",
+              "files are path-sorted and concatenated; this is not a natural repository or agent prompt",
+              "the prompt contains only a prefix of the source corpus",
+              "ignore_eos=true forces the requested output length and can expose repetition after a natural stopping point"
+            ]
+          },
+          "interpretation": "Raw short continuation showed degenerate repetition; diagnostic only, not promotion."
+        },
+        {
+          "id": "long-code",
+          "raw_report": "baseline-hot86/long-code.json.gz",
+          "raw_json_sha256": "065046fde58a757dec94dc127ef288101133a239f41d6f66b1d289b3af602554",
+          "client_script_sha256": "9aefbe5eaccc682a6340b2df8a15615ec5452d8596263f5571782920e185898b",
+          "prompt_style": "repo-code",
+          "input_tokens": 258048,
+          "output_tokens": 4096,
+          "warmup_runs": 0,
+          "measured_runs": 3,
+          "aggregate": {
+            "reciprocal_mean_api_observed_tpot_tokens_per_second": 78.82382444510567,
+            "api_observed_decode_rate_min_tokens_per_second": 78.79308141280151,
+            "api_observed_decode_rate_max_tokens_per_second": 78.855999470403,
+            "ttft_min_seconds": 215.50441220999983,
+            "ttft_max_seconds": 221.44599803999972
+          },
+          "mtp_metrics": {
+            "available": true,
+            "scope": "all case requests between snapshots, including warmups",
+            "before_file": "long-code.metrics-before.txt",
+            "after_file": "long-code.metrics-after.txt",
+            "deltas": {
+              "drafts": 3576.0,
+              "draft_tokens": 10724.0,
+              "accepted_draft_tokens": 8709.0
+            },
+            "accepted_draft_token_percent": 81.21036926519955,
+            "accepted_draft_tokens_per_draft": 2.4354026845637584,
+            "warnings": []
+          },
+          "runs": [
+            {
+              "index": 0,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 258048,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 258048,
+                "total_tokens": 262144,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "525a2ce7c1f84f4c89bf1183b89e2b07d44c6a6d7e1772e9aa5efb241d1c687c",
+              "output_token_ids_sha256": "8472a0bd0e13fc3052b12db8d8517deba9d46416845384a1bb9a4a31063270e9",
+              "ttft_seconds": 221.44599803999972,
+              "api_observed_tpot_seconds": 0.012681343293040496,
+              "api_observed_decode_estimate_tokens_per_second": 78.855999470403,
+              "request_duration_seconds": 273.37627608100047,
+              "telemetry": {
+                "samples_inside_run": 131,
+                "peak_cpu_tctl_c": 79.0,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 72.0,
+                    "peak_power_w": 295.68
+                  },
+                  "1": {
+                    "peak_temperature_c": 80.0,
+                    "peak_power_w": 297.62
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788570951.7744272,
+                  "end_sample_time": 1788571226.5531588,
+                  "pswpin_pages_delta": 1155206,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "long-code.measured-0.output.txt",
+                "sha256": "525a2ce7c1f84f4c89bf1183b89e2b07d44c6a6d7e1772e9aa5efb241d1c687c",
+                "matches_reported_output_text_sha256": true,
+                "characters": 14002,
+                "words": 1712,
+                "nonempty_lines": 208,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.03225806451612903,
+                "most_repeated_nonempty_line": {
+                  "count": 10,
+                  "preview": "None,"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 140,
+                  "unit_characters": 14,
+                  "repetitions": 10,
+                  "unit_preview": ",\n        None"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "raw synthetic continuation only; this is not a correctness or model-quality score",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 1,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 258048,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 258048,
+                "total_tokens": 262144,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "73a1f4e7f906c3e8cf261ff4b0301f60b7cadc9307759409f1b2fd327bb086df",
+              "output_token_ids_sha256": "06c9c6ec3fe7d56342e04a0563ed22abf0736d5ecaca820cbdbf8f5c1abad53e",
+              "ttft_seconds": 215.7264038200001,
+              "api_observed_tpot_seconds": 0.012691469632478797,
+              "api_observed_decode_estimate_tokens_per_second": 78.79308141280151,
+              "request_duration_seconds": 267.6981526870004,
+              "telemetry": {
+                "samples_inside_run": 129,
+                "peak_cpu_tctl_c": 79.25,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 72.0,
+                    "peak_power_w": 282.73
+                  },
+                  "1": {
+                    "peak_temperature_c": 80.0,
+                    "peak_power_w": 292.52
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788571224.4681623,
+                  "end_sample_time": 1788571494.6649609,
+                  "pswpin_pages_delta": 3646,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "long-code.measured-1.output.txt",
+                "sha256": "73a1f4e7f906c3e8cf261ff4b0301f60b7cadc9307759409f1b2fd327bb086df",
+                "matches_reported_output_text_sha256": true,
+                "characters": 13476,
+                "words": 1204,
+                "nonempty_lines": 356,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.05513784461152882,
+                "most_repeated_nonempty_line": {
+                  "count": 20,
+                  "preview": ")"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 140,
+                  "unit_characters": 14,
+                  "repetitions": 10,
+                  "unit_preview": ",\n        None"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "raw synthetic continuation only; this is not a correctness or model-quality score",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 2,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 258048,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 258048,
+                "total_tokens": 262144,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "5c2844a9678b00c55b89ec5ece86bd61c974fa1305443a0400c2466431e03570",
+              "output_token_ids_sha256": "677f0a97ef2d141610f8b3434c62bd56d7db0e69efb1ee81ae266ad6478a1ea1",
+              "ttft_seconds": 215.50441220999983,
+              "api_observed_tpot_seconds": 0.012686746111599666,
+              "api_observed_decode_estimate_tokens_per_second": 78.82241760049776,
+              "request_duration_seconds": 267.4567936220001,
+              "telemetry": {
+                "samples_inside_run": 129,
+                "peak_cpu_tctl_c": 78.625,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 73.0,
+                    "peak_power_w": 294.58
+                  },
+                  "1": {
+                    "peak_temperature_c": 81.0,
+                    "peak_power_w": 297.44
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788571492.5849795,
+                  "end_sample_time": 1788571763.1062093,
+                  "pswpin_pages_delta": 26116,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "long-code.measured-2.output.txt",
+                "sha256": "5c2844a9678b00c55b89ec5ece86bd61c974fa1305443a0400c2466431e03570",
+                "matches_reported_output_text_sha256": true,
+                "characters": 14721,
+                "words": 1910,
+                "nonempty_lines": 201,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.028901734104046242,
+                "most_repeated_nonempty_line": {
+                  "count": 10,
+                  "preview": "None,"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 140,
+                  "unit_characters": 14,
+                  "repetitions": 10,
+                  "unit_preview": ",\n        None"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "raw synthetic continuation only; this is not a correctness or model-quality score",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            }
+          ],
+          "source_coverage": {
+            "style": "repo-code",
+            "requested_input_tokens": 258048,
+            "source_token_count": 243328,
+            "observed_source_token_ids": 243328,
+            "declared_source_count_matches_stored_ids": true,
+            "complete_source_cycles_in_prompt": 1,
+            "source_prefix_tokens_after_complete_cycles": 14720,
+            "source_coverage_basis": "derived from raw-prompt input and source token counts",
+            "source_tokens_in_prompt": 258048,
+            "fixed_prefix_tokens": null,
+            "fixed_suffix_tokens": null,
+            "chat_wrapper_tokens": null,
+            "prompt_token_accounting_reconciles": true,
+            "declared_includes_complete_source_corpus": null,
+            "declared_complete_source_matches_cycles": null,
+            "source_text_sha256": "ba7704ed6f3b0bc1df0922ff0a30aff0ebeb9c3e90af807deeeae7f79502f986",
+            "source_file_count": 27,
+            "first_source_path": "runtime/vllm-overlay/model_executor/layers/fused_moe/oracle/int_wna16.py",
+            "last_source_path": "runtime/vllm-overlay/v1/worker/gpu_worker.py",
+            "contains_imported_private_data": false,
+            "caveats": [
+              "raw completion has no task instruction and cannot establish answer quality",
+              "add_special_tokens=false; this is a synthetic completion workload",
+              "files are path-sorted and concatenated; this is not a natural repository or agent prompt",
+              "the prompt contains a complete source corpus plus a repeated prefix",
+              "ignore_eos=true forces the requested output length and can expose repetition after a natural stopping point"
+            ]
+          },
+          "interpretation": "Synthetic throughput evidence; forced length is not a completed-answer quality score."
+        }
+      ],
+      "allocator_warning_count": 2450,
+      "thermal_peaks": {
+        "cpu_tctl_c": 79.25,
+        "gpu_temperature_c": [
+          73.0,
+          81.0
+        ],
+        "gpu_power_w": [
+          299.14,
+          299.6
+        ],
+        "gpu_power_limit_w_each": 300
+      }
+    },
+    {
+      "id": "candidate-hot84-p2p",
+      "environment": "candidate-hot84-p2p/environment.json",
+      "profile": {
+        "max_model_len": 262144,
+        "max_num_seqs": 1,
+        "max_num_batched_tokens": 4096,
+        "kv_cache_memory_bytes": 4429185024,
+        "hot_experts_per_layer": 84,
+        "mtp_depth": 3,
+        "qsa": "approximate",
+        "custom_all_reduce_disabled": false,
+        "pytorch_cuda_alloc_conf": "expandable_segments:False"
+      },
+      "cases": [
+        {
+          "id": "short-chat",
+          "raw_report": "candidate-hot84-p2p/short-chat.json.gz",
+          "raw_json_sha256": "3fbfcf6615a819a0f64abcf77628fe124e202ee9018f70858ff948d2627924d3",
+          "client_script_sha256": "f5699b249c15b3fb1a2693db59a92fce9e7a64ac13977595a4c7b9b51bd6e804",
+          "prompt_style": "repo-chat",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "warmup_runs": 1,
+          "measured_runs": 3,
+          "aggregate": {
+            "reciprocal_mean_api_observed_tpot_tokens_per_second": 77.2845013480967,
+            "api_observed_decode_rate_min_tokens_per_second": 74.7458964419215,
+            "api_observed_decode_rate_max_tokens_per_second": 79.70724363351594,
+            "ttft_min_seconds": 0.897063313000217,
+            "ttft_max_seconds": 0.9034152169997469
+          },
+          "mtp_metrics": {
+            "available": true,
+            "scope": "all case requests between snapshots, including warmups",
+            "before_file": "short-chat.metrics-before.txt",
+            "after_file": "short-chat.metrics-after.txt",
+            "deltas": {
+              "drafts": 6306.0,
+              "draft_tokens": 18918.0,
+              "accepted_draft_tokens": 10081.0
+            },
+            "accepted_draft_token_percent": 53.28787398245058,
+            "accepted_draft_tokens_per_draft": 1.5986362194735173,
+            "warnings": []
+          },
+          "runs": [
+            {
+              "index": 0,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 128,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 128,
+                "total_tokens": 4224,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "8f699376c844d64b3833903ac7fa771a49f579fa015f34fe69ca122d8d6a0f8d",
+              "output_token_ids_sha256": "ae0ea0acce2b3c415d0e9ef8d61d8282974d18acf2f8e5071a1bfe8d5fcdc7af",
+              "ttft_seconds": 0.897063313000217,
+              "api_observed_tpot_seconds": 0.012893042693528744,
+              "api_observed_decode_estimate_tokens_per_second": 77.5612106288858,
+              "request_duration_seconds": 53.69422111299991,
+              "telemetry": {
+                "samples_inside_run": 26,
+                "peak_cpu_tctl_c": 75.375,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 71.0,
+                    "peak_power_w": 297.9
+                  },
+                  "1": {
+                    "peak_temperature_c": 76.0,
+                    "peak_power_w": 298.27
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788572606.735912,
+                  "end_sample_time": 1788572662.3668547,
+                  "pswpin_pages_delta": 48411,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "short-chat.measured-0.output.txt",
+                "sha256": "8f699376c844d64b3833903ac7fa771a49f579fa015f34fe69ca122d8d6a0f8d",
+                "matches_reported_output_text_sha256": true,
+                "characters": 13642,
+                "words": 1942,
+                "nonempty_lines": 167,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.0036175710594315244,
+                "most_repeated_nonempty_line": {
+                  "count": 1,
+                  "preview": "We need answer user's request: \"Write a detailed tutorial on multi-GPU inference: tensor parallelism, CPU offload, exper"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 6,
+                  "unit_characters": 3,
+                  "repetitions": 2,
+                  "unit_preview": "ver"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "instruction-bearing synthetic chat response; these heuristics do not establish correctness or model quality",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 1,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 128,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 128,
+                "total_tokens": 4224,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "a0e8368f607f9eadf5d4d1b4030625d053b30f60b2d5e6785c1454c90a800519",
+              "output_token_ids_sha256": "91ed9a7090dd5078d496cf7a27df501ffb4ec9c093f907a3611ebe00cf420f75",
+              "ttft_seconds": 0.9034152169997469,
+              "api_observed_tpot_seconds": 0.013378660871062166,
+              "api_observed_decode_estimate_tokens_per_second": 74.7458964419215,
+              "request_duration_seconds": 55.689192077999905,
+              "telemetry": {
+                "samples_inside_run": 27,
+                "peak_cpu_tctl_c": 75.0,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 71.0,
+                    "peak_power_w": 298.12
+                  },
+                  "1": {
+                    "peak_temperature_c": 78.0,
+                    "peak_power_w": 299.37
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788572660.0520818,
+                  "end_sample_time": 1788572718.0022407,
+                  "pswpin_pages_delta": 45709,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "short-chat.measured-1.output.txt",
+                "sha256": "a0e8368f607f9eadf5d4d1b4030625d053b30f60b2d5e6785c1454c90a800519",
+                "matches_reported_output_text_sha256": true,
+                "characters": 14379,
+                "words": 1979,
+                "nonempty_lines": 162,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.009127789046653144,
+                "most_repeated_nonempty_line": {
+                  "count": 8,
+                  "preview": "```"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 10,
+                  "unit_characters": 1,
+                  "repetitions": 10,
+                  "unit_preview": " "
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "instruction-bearing synthetic chat response; these heuristics do not establish correctness or model quality",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 2,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 128,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 128,
+                "total_tokens": 4224,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "e3a605b4391e21fe3898aa0472afd7bb1983ed3ec611474bd6809a19f59071d1",
+              "output_token_ids_sha256": "3df858388a5101793bec64514c45bb85792dcff00fe17b3708d595f1c7b9f1bb",
+              "ttft_seconds": 0.9015596949993778,
+              "api_observed_tpot_seconds": 0.0125459111921857,
+              "api_observed_decode_estimate_tokens_per_second": 79.70724363351594,
+              "request_duration_seconds": 52.277217863999795,
+              "telemetry": {
+                "samples_inside_run": 26,
+                "peak_cpu_tctl_c": 75.5,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 72.0,
+                    "peak_power_w": 298.52
+                  },
+                  "1": {
+                    "peak_temperature_c": 79.0,
+                    "peak_power_w": 298.54
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788572715.6281605,
+                  "end_sample_time": 1788572771.2916522,
+                  "pswpin_pages_delta": 34271,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "short-chat.measured-2.output.txt",
+                "sha256": "e3a605b4391e21fe3898aa0472afd7bb1983ed3ec611474bd6809a19f59071d1",
+                "matches_reported_output_text_sha256": true,
+                "characters": 12518,
+                "words": 1766,
+                "nonempty_lines": 121,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.008527572484366117,
+                "most_repeated_nonempty_line": {
+                  "count": 2,
+                  "preview": "- Pseudocode:"
+                },
+                "longest_immediate_repeat": {
+                  "characters": 20,
+                  "unit_characters": 10,
+                  "repetitions": 2,
+                  "unit_preview": "[1,1,0,0],"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "instruction-bearing synthetic chat response; these heuristics do not establish correctness or model quality",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            }
+          ],
+          "source_coverage": {
+            "style": "repo-chat",
+            "requested_input_tokens": 128,
+            "source_token_count": 243329,
+            "observed_source_token_ids": 243329,
+            "declared_source_count_matches_stored_ids": true,
+            "complete_source_cycles_in_prompt": 0,
+            "source_prefix_tokens_after_complete_cycles": 11,
+            "source_coverage_basis": "recorded prompt recipe",
+            "source_tokens_in_prompt": 11,
+            "fixed_prefix_tokens": 107,
+            "fixed_suffix_tokens": 10,
+            "chat_wrapper_tokens": 117,
+            "prompt_token_accounting_reconciles": true,
+            "declared_includes_complete_source_corpus": false,
+            "declared_complete_source_matches_cycles": true,
+            "source_text_sha256": "ba7704ed6f3b0bc1df0922ff0a30aff0ebeb9c3e90af807deeeae7f79502f986",
+            "source_file_count": 27,
+            "first_source_path": "runtime/vllm-overlay/model_executor/layers/fused_moe/oracle/int_wna16.py",
+            "last_source_path": "runtime/vllm-overlay/v1/worker/gpu_worker.py",
+            "contains_imported_private_data": false,
+            "caveats": [
+              "the server tokenizer supplied the chat template and generation prefix around a public code-review instruction",
+              "files are path-sorted and concatenated inside the source tags; this remains a synthetic workload",
+              "the response can be reviewed for coherence, but this benchmark does not establish factual correctness or model quality",
+              "the prompt contains only a prefix of the source corpus",
+              "ignore_eos=true forces the requested output length and can expose repetition after a natural stopping point"
+            ]
+          },
+          "interpretation": "Synthetic throughput evidence; forced length is not a completed-answer quality score."
+        },
+        {
+          "id": "long-chat",
+          "raw_report": "candidate-hot84-p2p/long-chat.json.gz",
+          "raw_json_sha256": "359dbf32518f075052a9c37e8791549747a1788923b2cd8530bae9ff7654a953",
+          "client_script_sha256": "f5699b249c15b3fb1a2693db59a92fce9e7a64ac13977595a4c7b9b51bd6e804",
+          "prompt_style": "repo-chat",
+          "input_tokens": 258048,
+          "output_tokens": 4096,
+          "warmup_runs": 0,
+          "measured_runs": 3,
+          "aggregate": {
+            "reciprocal_mean_api_observed_tpot_tokens_per_second": 75.63607343180192,
+            "api_observed_decode_rate_min_tokens_per_second": 74.03074934852201,
+            "api_observed_decode_rate_max_tokens_per_second": 76.70715816615905,
+            "ttft_min_seconds": 211.05852903900086,
+            "ttft_max_seconds": 215.12780280600055
+          },
+          "mtp_metrics": {
+            "available": true,
+            "scope": "all case requests between snapshots, including warmups",
+            "before_file": "long-chat.metrics-before.txt",
+            "after_file": "long-chat.metrics-after.txt",
+            "deltas": {
+              "drafts": 4546.0,
+              "draft_tokens": 13633.0,
+              "accepted_draft_tokens": 7739.0
+            },
+            "accepted_draft_token_percent": 56.76666911171422,
+            "accepted_draft_tokens_per_draft": 1.7023757149142102,
+            "warnings": []
+          },
+          "runs": [
+            {
+              "index": 0,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 258048,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 258048,
+                "total_tokens": 262144,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "4a0eba3d7b1bd521d54ed2fc14358112808ea2da85a63f94ec1cf9a60ee078a0",
+              "output_token_ids_sha256": "67d88500077fff8914f690a8c2a9b20c373771233f1604a5da4bf202f72c4739",
+              "ttft_seconds": 215.12780280600055,
+              "api_observed_tpot_seconds": 0.013507900552136779,
+              "api_observed_decode_estimate_tokens_per_second": 74.03074934852201,
+              "request_duration_seconds": 270.44282098000076,
+              "telemetry": {
+                "samples_inside_run": 130,
+                "peak_cpu_tctl_c": 77.0,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 72.0,
+                    "peak_power_w": 295.93
+                  },
+                  "1": {
+                    "peak_temperature_c": 79.0,
+                    "peak_power_w": 299.08
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788572828.8180938,
+                  "end_sample_time": 1788573101.4994245,
+                  "pswpin_pages_delta": 1151860,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "long-chat.measured-0.output.txt",
+                "sha256": "4a0eba3d7b1bd521d54ed2fc14358112808ea2da85a63f94ec1cf9a60ee078a0",
+                "matches_reported_output_text_sha256": true,
+                "characters": 13733,
+                "words": 2005,
+                "nonempty_lines": 59,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.002002002002002002,
+                "most_repeated_nonempty_line": {
+                  "count": 1,
+                  "preview": "The user wants a detailed tutorial on multi-GPU inference covering tensor parallelism, CPU offload, expert LRU caching, "
+                },
+                "longest_immediate_repeat": {
+                  "characters": 12,
+                  "unit_characters": 6,
+                  "repetitions": 2,
+                  "unit_preview": " * 128"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "instruction-bearing synthetic chat response; these heuristics do not establish correctness or model quality",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 1,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 258048,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 258048,
+                "total_tokens": 262144,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "73aed17191b5eeb9c413763837b645b208f971c8740d22502184382d76b062a5",
+              "output_token_ids_sha256": "7bd92b2335b7bbd12812614b702ada976041ddb3af6c2ce645490f03eabc63ef",
+              "ttft_seconds": 211.05852903900086,
+              "api_observed_tpot_seconds": 0.013036592984371187,
+              "api_observed_decode_estimate_tokens_per_second": 76.70715816615905,
+              "request_duration_seconds": 264.44354050900074,
+              "telemetry": {
+                "samples_inside_run": 127,
+                "peak_cpu_tctl_c": 77.0,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 72.0,
+                    "peak_power_w": 296.08
+                  },
+                  "1": {
+                    "peak_temperature_c": 80.0,
+                    "peak_power_w": 298.22
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788573099.4276426,
+                  "end_sample_time": 1788573366.1523716,
+                  "pswpin_pages_delta": 43216,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "long-chat.measured-1.output.txt",
+                "sha256": "73aed17191b5eeb9c413763837b645b208f971c8740d22502184382d76b062a5",
+                "matches_reported_output_text_sha256": true,
+                "characters": 14164,
+                "words": 2023,
+                "nonempty_lines": 60,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 7.060152499293985e-05,
+                "repeated_8_word_window_fraction": 0.0,
+                "most_repeated_nonempty_line": {
+                  "count": 1,
+                  "preview": "The user wants a detailed tutorial on multi-GPU inference covering tensor parallelism, CPU offload, expert LRU caching, "
+                },
+                "longest_immediate_repeat": {
+                  "characters": 8,
+                  "unit_characters": 4,
+                  "repetitions": 2,
+                  "unit_preview": "*128"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "instruction-bearing synthetic chat response; these heuristics do not establish correctness or model quality",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            },
+            {
+              "index": 2,
+              "status": "ok",
+              "errors": [],
+              "requested": {
+                "input_tokens": 258048,
+                "output_tokens": 4096
+              },
+              "usage": {
+                "prompt_tokens": 258048,
+                "total_tokens": 262144,
+                "completion_tokens": 4096
+              },
+              "exact_counts": {
+                "prompt_tokens": true,
+                "completion_tokens": true,
+                "total_tokens": true
+              },
+              "all_counts_exact": true,
+              "output_text_sha256": "fcfdfa9ebaf6e059330872a8fa19e85d801d72d6ecfa1621a3a3aa5139822c3d",
+              "output_token_ids_sha256": "134df42736a5ec58e294abe111ab42e65a1ee98ba02715de35f4a0e233a45d80",
+              "ttft_seconds": 211.22819243899903,
+              "api_observed_tpot_seconds": 0.013119120184859822,
+              "api_observed_decode_estimate_tokens_per_second": 76.22462374832531,
+              "request_duration_seconds": 264.95115699300004,
+              "telemetry": {
+                "samples_inside_run": 127,
+                "peak_cpu_tctl_c": 75.375,
+                "gpus": {
+                  "0": {
+                    "peak_temperature_c": 73.0,
+                    "peak_power_w": 298.59
+                  },
+                  "1": {
+                    "peak_temperature_c": 81.0,
+                    "peak_power_w": 297.69
+                  }
+                },
+                "vmstat": {
+                  "method": "last sample at/before start to first sample at/after finish",
+                  "start_sample_time": 1788573364.0432255,
+                  "end_sample_time": 1788573630.1939948,
+                  "pswpin_pages_delta": 39793,
+                  "pswpout_pages_delta": 0
+                }
+              },
+              "captured_output_review": {
+                "file": "long-chat.measured-2.output.txt",
+                "sha256": "fcfdfa9ebaf6e059330872a8fa19e85d801d72d6ecfa1621a3a3aa5139822c3d",
+                "matches_reported_output_text_sha256": true,
+                "characters": 16276,
+                "words": 1959,
+                "nonempty_lines": 64,
+                "replacement_characters": 0,
+                "unexpected_control_characters": 0,
+                "trailing_whitespace_fraction": 0.0,
+                "repeated_8_word_window_fraction": 0.0,
+                "most_repeated_nonempty_line": {
+                  "count": 1,
+                  "preview": "The user wants a detailed tutorial on multi-GPU inference covering tensor parallelism, CPU offload, expert LRU caching, "
+                },
+                "longest_immediate_repeat": {
+                  "characters": 32,
+                  "unit_characters": 16,
+                  "repetitions": 2,
+                  "unit_preview": ", routed_experts"
+                },
+                "assessment": [
+                  "no gross repetition or encoding garbling detected by these heuristics",
+                  "instruction-bearing synthetic chat response; these heuristics do not establish correctness or model quality",
+                  "ignore_eos=true forces the requested length and can expose repetition after a natural stopping point"
+                ]
+              }
+            }
+          ],
+          "source_coverage": {
+            "style": "repo-chat",
+            "requested_input_tokens": 258048,
+            "source_token_count": 243329,
+            "observed_source_token_ids": 243329,
+            "declared_source_count_matches_stored_ids": true,
+            "complete_source_cycles_in_prompt": 1,
+            "source_prefix_tokens_after_complete_cycles": 14602,
+            "source_coverage_basis": "recorded prompt recipe",
+            "source_tokens_in_prompt": 257931,
+            "fixed_prefix_tokens": 107,
+            "fixed_suffix_tokens": 10,
+            "chat_wrapper_tokens": 117,
+            "prompt_token_accounting_reconciles": true,
+            "declared_includes_complete_source_corpus": true,
+            "declared_complete_source_matches_cycles": true,
+            "source_text_sha256": "ba7704ed6f3b0bc1df0922ff0a30aff0ebeb9c3e90af807deeeae7f79502f986",
+            "source_file_count": 27,
+            "first_source_path": "runtime/vllm-overlay/model_executor/layers/fused_moe/oracle/int_wna16.py",
+            "last_source_path": "runtime/vllm-overlay/v1/worker/gpu_worker.py",
+            "contains_imported_private_data": false,
+            "caveats": [
+              "the server tokenizer supplied the chat template and generation prefix around a public code-review instruction",
+              "files are path-sorted and concatenated inside the source tags; this remains a synthetic workload",
+              "the response can be reviewed for coherence, but this benchmark does not establish factual correctness or model quality",
+              "the prompt contains a complete source corpus plus a repeated prefix",
+              "ignore_eos=true forces the requested output length and can expose repetition after a natural stopping point"
+            ]
+          },
+          "interpretation": "Synthetic throughput evidence; forced length is not a completed-answer quality score."
+        }
+      ],
+      "allocator_warning_count": 4,
+      "thermal_peaks": {
+        "cpu_tctl_c": 77.0,
+        "gpu_temperature_c": [
+          73.0,
+          81.0
+        ],
+        "gpu_power_w": [
+          298.59,
+          299.37
+        ],
+        "gpu_power_limit_w_each": 300
+      }
+    }
+  ]
+}
