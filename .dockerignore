@@ -5,3 +5,4 @@
 !configs/static_hot_cache_rankings.json
 !scripts/serve-container.sh
 !tests/test_qsa_exact_topk_cpu.py
+!scripts/check_custom_all_reduce.py
