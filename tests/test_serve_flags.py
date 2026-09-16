@@ -73,6 +73,7 @@ class ServeFlagsTests(unittest.TestCase):
     def run_launcher(
         self, value: str | None = None, allocator: str | None = None,
         hot_cache: str | None = None,
+        settings: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env["PATH"] = f"{self.bin_dir}{os.pathsep}{env['PATH']}"
@@ -80,12 +81,15 @@ class ServeFlagsTests(unittest.TestCase):
         env.pop("DISABLE_CUSTOM_ALL_REDUCE", None)
         env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
         env.pop("VLLM_WNA16_STATIC_HOT_CACHE_SIZE", None)
+        for name in ("ENABLE_VISION", "VISION_MAX_IMAGES", "VISION_MAX_PIXELS"):
+            env.pop(name, None)
         if value is not None:
             env["DISABLE_CUSTOM_ALL_REDUCE"] = value
         if allocator is not None:
             env["PYTORCH_CUDA_ALLOC_CONF"] = allocator
         if hot_cache is not None:
             env["VLLM_WNA16_STATIC_HOT_CACHE_SIZE"] = hot_cache
+        env.update(settings or {})
         return subprocess.run(
             [str(self.launcher), str(self.model)],
             env=env,
@@ -137,6 +141,45 @@ class ServeFlagsTests(unittest.TestCase):
         self.assertNotIn("--disable-custom-all-reduce", captured["argv"])
         self.assertEqual(captured["env"]["DISABLE_CUSTOM_ALL_REDUCE"], "0")
         self.assertEqual(captured["env"]["PYTORCH_CUDA_ALLOC_CONF"], allocator)
+
+    def test_text_only_remains_the_default(self) -> None:
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertIn("--language-model-only", argv)
+        self.assertNotIn("--limit-mm-per-prompt", argv)
+
+    def test_vision_enables_bounded_images_without_changing_precision(self) -> None:
+        result = self.run_launcher(hot_cache="80", settings={"ENABLE_VISION": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertNotIn("--language-model-only", argv)
+        self.assertEqual(json.loads(argv[argv.index("--limit-mm-per-prompt") + 1]),
+                         {"image": 1, "video": 0})
+        self.assertEqual(json.loads(argv[argv.index("--mm-processor-kwargs") + 1]),
+                         {"min_pixels": 65536, "max_pixels": 1048576})
+        self.assertEqual(argv[argv.index("--dtype") + 1], "bfloat16")
+        self.assertEqual(argv[argv.index("--max-model-len") + 1], "262144")
+        self.assertEqual(json.loads(argv[argv.index("--speculative-config") + 1])[
+            "num_speculative_tokens"], 3)
+
+    def test_invalid_vision_settings_fail_before_exec(self) -> None:
+        for settings in ({"ENABLE_VISION": "yes"},
+                         {"ENABLE_VISION": "1", "VISION_MAX_IMAGES": "0"},
+                         {"ENABLE_VISION": "1", "VISION_MAX_PIXELS": "32768"},
+                         {"ENABLE_VISION": "1", "VISION_MAX_PIXELS": "-1"}):
+            with self.subTest(settings=settings):
+                result = self.run_launcher(settings=settings)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse(self.capture.exists())
+
+    def test_docker_launcher_forwards_vision_settings(self) -> None:
+        settings = {"ENABLE_VISION": "1", "VISION_MAX_IMAGES": "1",
+                    "VISION_MAX_PIXELS": "1048576"}
+        result = self.run_docker_launcher(settings)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name, value in settings.items():
+            self.assertIn(f"{name}={value}", self.captured()["argv"])
 
     def test_default_uses_hot84_without_reducing_context(self) -> None:
         result = self.run_launcher()
