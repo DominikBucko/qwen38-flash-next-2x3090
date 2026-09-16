@@ -18,7 +18,7 @@
   "models/qwen3_8_flash_next/nvidia/model_state.py": "9ffe2a025a3661f60b9698bead0b6668ef4b92443fd92bd5ed7d462dfa72048f",
   "models/qwen3_8_flash_next/nvidia/mtp.py": "124c5a6e7bbc4c13b2467778a7a5b0005d5cb66d525e587f1e2b8439cf615198",
   "models/qwen3_8_flash_next/nvidia/ops/hc.py": "d48abc27dd28a3f7b031cea091c19e73c53a1b13853c3fdb017b595a38102f6a",
-  "models/qwen3_8_flash_next/nvidia/ops/qsa.py": "528f27eb24deec93ded99193a46e98b23a0f353afc0a2a86e3385b0c0e2b0b8e",
+  "models/qwen3_8_flash_next/nvidia/ops/qsa.py": "c8b45be537fa33839f5ebc127c1f3f542193cfed024d435a63737d74a5bdda57",
   "models/qwen3_8_flash_next/nvidia/ple_layer.py": "59983e682070f450c957f58555c4c670032e53693040486dbfdc4c798df80b20",
   "models/qwen3_8_flash_next/nvidia/qsa.py": "cf37ac72d3df25c5b4835985574a68497eb9d1357300e8619a66ba9695096cc2",
   "v1/core/sched/scheduler.py": "b7f1ecfca23811a6c730949b5d4084150a19e64b0ff3abd39ceba58c54748648",

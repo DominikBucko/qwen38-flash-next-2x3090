@@ -151,7 +151,8 @@ that check if the packing or file layout changes.
 PLE is an embedding-style lookup over a huge table. Keeping it on disk would put
 latency behind page faults and storage locality. It might look acceptable after
 the page cache is warm and collapse on an unseen access pattern. The validated
-path keeps it resident in system memory.
+path places it in CPU memory, but the OS can still page it to swap. Check live
+residency during serving rather than assuming that configured RAM is sufficient.
 
 FP8 halves the original BF16 table and uses an already published scale. INT4
 would save more memory, but it would introduce another unvalidated quality
@@ -603,6 +604,41 @@ Check, in this order:
 10. CUDA graph capture did not fall back for decode.
 
 ### Full context OOMs while short tests pass
+
+QSA prefill used to allocate up to 128 MiB of scores per row chunk and keep the
+previous chunk alive while allocating the next. The issue-5 fix caps scores at
+64 MiB and explicitly releases each chunk. At 1,024 rows and 65,536 columns,
+the CUDA probe measured 266.02 -> 73.51 MiB peak extra allocation. A 96 MiB
+temporary allocator budget reproduces the old OOM and admits the new path.
+All seven tested shapes (4 through 4,096 rows) select the same attention-token
+sets. Approximate top-k order itself is non-deterministic even in the unchanged
+baseline; compare selected sets, not only ordered index arrays. No top-k budget,
+visible columns, target weights, or numeric dtype is reduced by this fix.
+
+Full-model checks with both fixes retained MTP3, BF16 KV, 4,096-token prefill,
+and 262,144 total context. Hot88 completed the same staircase as the control;
+full-context TTFT was 217.59 vs 217.22 seconds, with inference allocation retries
+reduced from 20 to 4. Hot84 completed 262,016+128 as its first user request, then
+1,024+128 and 128+1,024, with zero inference retries. Both had two recoverable
+load-time retries. Recommend hot84 as the tested fallback, not a smaller KV
+pool or lower precision. No universal driver/display-memory guarantee follows
+from one native host. The short 32/128-output timings have SSE buffering
+artifacts and must not become new decode claims.
+
+The matched September 16 long-decode sweep retained the same public repo-chat
+input token hashes across hot88, hot86, and hot84. Each profile used a 512-token
+smoke, a 4,096-token warmup, three 128+4,096 requests, and one 258,048+4,096
+request. Short aggregates were 78.92/76.06/75.81 tok/s; full-context decode was
+77.50/77.67/77.59. Inference allocation retries were 2/2/0. See
+`benchmarks/2026-09-16/long-decode.json` and `qsa-memory.md` in the same directory.
+Do not replace historical headline results or extend their graph with these
+unmatched workloads. The long-context rate is a single request per profile.
+
+PLE residency was not complete: the worker retained roughly 35 GiB in swap
+after loading, with 29 GiB reported available RAM. Decode-only samples read
+about 86–154 MiB per 4,096 output tokens. This is observed paging, not a measured
+latency attribution or proof that swap can safely be disabled. Preserve this
+caveat when comparing cache sizes and historical MTP peaks.
 
 Verify the explicit KV byte allocation and `MAX_NUM_SEQS=1`. Then inspect hot
 cache capacity, batched-token budget, and transient allocations. Do not reduce

@@ -54,6 +54,30 @@ VRAM are:
 | `KV_CACHE_MEMORY_BYTES` | 4,429,185,024 | 4,294,967,296 | Saves 128 MiB per GPU; verify that reported KV capacity remains at least 262,144 tokens. |
 | `MAX_NUM_BATCHED_TOKENS` | 4,096 | 2,048 | Reduces prefill temporary tensors; lowers prefill throughput. |
 
+Update and rebuild before tuning around a QSA score-allocation OOM. The patched
+selector limits score chunks to 64 MiB and releases each chunk before allocating
+the next. The previous implementation could have two 128 MiB score tensors live
+at once. This changes temporary storage, not weight precision, attention top-k,
+or the number of visible keys. It does not remove the memory needed by other
+prefill operations, so hot88 can still be too tight on some hosts.
+
+If hot88 OOMs, use `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84` first. This frees about
+464 MiB of expert storage per GPU without reducing context or model precision.
+Experts that are not cached on the GPU are still available from RAM. With the
+patched runtime, hot84 passed a 262,016-input + 128-output request as the first
+request after startup, then two shorter requests, with no inference-time
+allocation retries. Hot88 passed too, but still logged four retries. Both had
+two recoverable retries during weight loading; that is a separate phase.
+These are native-runtime checks on one host, not a guarantee for every driver
+or display setup. The [validation record](../benchmarks/2026-09-16/qsa-memory.json)
+contains the settings and limits.
+
+The longer 4,096-output-token comparison measured 78.92 / 76.06 / 75.81 tok/s
+at short context for hot88 / hot86 / hot84. Near-full-context decode was
+77.50 / 77.67 / 77.59 tok/s. Hot84 had no inference allocation retries; hot88
+and hot86 had two each. These are three short runs and one long run per profile,
+not a precise cache-size penalty. See the [test notes](../benchmarks/2026-09-16/qsa-memory.md).
+
 Apply the smallest change that starts reliably. Do not lower weight precision,
 KV precision, MTP precision, or PLE precision as an OOM workaround; those alter
 the model's quality contract.
