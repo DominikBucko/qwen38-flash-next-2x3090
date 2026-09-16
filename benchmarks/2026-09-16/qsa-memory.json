@@ -1,0 +1,140 @@
+{
+  "purpose": "Issue regression checks, not a replacement for historical benchmark claims",
+  "date": "2026-09-16",
+  "hardware": {
+    "gpus": "2x RTX 3090 24 GB",
+    "ram": "128 GB, 8-channel DDR4-3200"
+  },
+  "runtime": {
+    "base_repository_commit": "99d924ad6a08c58c01c41610be84ca046387de5d",
+    "deployment": "Pinned native vLLM plus overlay; not a fresh container test",
+    "checkpoint_revision": "ef554143369a706525336f6b42a09094835dc077",
+    "cuda_p2p": "enabled in both directions",
+    "custom_all_reduce": false,
+    "allocator": "expandable_segments:True"
+  },
+  "issue_5_qsa_component_check": {
+    "candidate_sha256": "c8b45be537fa33839f5ebc127c1f3f542193cfed024d435a63737d74a5bdda57",
+    "change": "64 MiB score chunks; explicitly release each chunk before allocating the next",
+    "weights_kv_dtype_topk_budget": "unchanged",
+    "probe": {
+      "seed": 8173,
+      "columns": 65536,
+      "head_dim": 128,
+      "query_heads": 2,
+      "token_topk": 2048,
+      "compress_ratio": 4
+    },
+    "row_counts": [
+      4,
+      8,
+      32,
+      33,
+      257,
+      1024,
+      4096
+    ],
+    "same_selected_token_sets": "7/7 passed",
+    "bitwise_index_order_equal": false,
+    "ordering_note": "The unmodified approximate selector also returns different index orders on repeated runs. Sorted selected token sets match both repeat and candidate checks.",
+    "rows_1024": {
+      "old_peak_extra_bytes": 278937600,
+      "new_peak_extra_bytes": 77083648,
+      "old_median_kernel_ms": 7.046144009,
+      "new_median_kernel_ms": 7.252831936
+    },
+    "rows_4096": {
+      "old_peak_extra_bytes": 304140288,
+      "new_peak_extra_bytes": 102286336,
+      "old_median_kernel_ms": 26.926944733,
+      "new_median_kernel_ms": 27.767808914
+    },
+    "allocator_96mib_temporary_budget": {
+      "old": "out_of_memory",
+      "new": "passed"
+    },
+    "limits": "Isolated QSA allocation/correctness check; not a full-model quality evaluation or a guarantee for every 24 GB GPU environment"
+  },
+  "issue_5_hot88_integration": {
+    "runtime": "Both PLE capture and QSA scratch fixes installed",
+    "settings": "Released hot88/MTP3/BF16 KV/full256K/4096-token prefill; custom all-reduce disabled; expandable segments enabled",
+    "startup_seconds": 305.346786725,
+    "probe_order": [
+      [
+        128,
+        32
+      ],
+      [
+        1024,
+        32
+      ],
+      [
+        65536,
+        32
+      ],
+      [
+        262016,
+        128
+      ]
+    ],
+    "all_exact_counts_passed": true,
+    "full_context_ttft_seconds": 217.585428837,
+    "previous_unmodified_full_context_ttft_seconds": 217.217050494,
+    "allocation_retries_loading": 2,
+    "allocation_retries_inference": 4,
+    "previous_unmodified_allocation_retries_loading": 2,
+    "previous_unmodified_allocation_retries_inference": 20,
+    "peaks": {
+      "cpu_c": 81.25,
+      "gpu_c": [
+        70,
+        75
+      ],
+      "gpu_w": [
+        251.39,
+        266.74
+      ]
+    },
+    "cleanup": "Server stopped normally; temporary loading swap removed",
+    "limits": "One run per shape, not a statistically controlled speed comparison. 32/128-output SSE timing is too short for a sustained decode claim. Hot88 still retries allocations and is not a universal safe default."
+  },
+  "issue_5_hot84_cold_integration": {
+    "runtime": "Both PLE capture and QSA scratch fixes installed",
+    "settings": "Hot84/MTP3/BF16 KV/full256K/4096-token prefill; all other settings match hot88",
+    "startup_seconds": 286.912946894,
+    "probe_order": [
+      [
+        262016,
+        128
+      ],
+      [
+        1024,
+        128
+      ],
+      [
+        128,
+        1024
+      ]
+    ],
+    "first_user_request_is_full_context": true,
+    "all_exact_counts_passed": true,
+    "full_context_ttft_seconds": 218.103013202,
+    "short_128_input_1024_output_ttft_seconds": 0.915580445,
+    "short_128_input_1024_output_api_decode_tps": 79.858077224,
+    "allocation_retries_loading": 2,
+    "allocation_retries_inference": 0,
+    "peaks": {
+      "cpu_c": 81.75,
+      "gpu_c": [
+        71,
+        75
+      ],
+      "gpu_w": [
+        295.15,
+        297.92
+      ]
+    },
+    "cleanup": "Server stopped normally; temporary loading swap removed",
+    "limits": "One run per shape. Different warmup policy from the hot88 check; not a matched throughput comparison. No claim of universal hardware/driver compatibility."
+  }
+}

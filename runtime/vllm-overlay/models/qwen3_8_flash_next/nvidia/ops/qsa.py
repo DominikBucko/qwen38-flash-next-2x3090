@@ -12,7 +12,10 @@ import torch
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON, tl, triton
 
-_LOGITS_WORKSPACE_BYTES = 128 * 1024 * 1024
+# Bound prefill scratch independently of the context length. A 128 MiB score
+# allocation fails on otherwise valid hot88 placements with ~90 MiB free.
+# Row chunking does not reduce the visible columns or change top-k precision.
+_LOGITS_WORKSPACE_BYTES = 64 * 1024 * 1024
 _TOPK_WORKSPACE_BYTES = 1024 * 1024
 _QSA_TOPK_MODE = os.environ.get("VLLM_QSA_EXACT_TOPK", "0").lower()
 if _QSA_TOPK_MODE in ("true", "yes"):
@@ -873,6 +876,9 @@ def qsa_select_paged_tokens(
             token_topk,
             out[row_slice],
         )
+        # Drop the previous chunk before qsa_mqa_paged allocates the next one.
+        # Assignment alone keeps both score tensors live during that call.
+        del logits, visible_blocks
     return out
 
 

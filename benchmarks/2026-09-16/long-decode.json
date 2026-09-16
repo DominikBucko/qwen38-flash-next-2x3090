@@ -1,0 +1,950 @@
+{
+  "date": "2026-09-16",
+  "purpose": "Matched expert-cache capacity probes, not replacement headline benchmarks",
+  "hardware": {
+    "gpus": "2x RTX 3090 24 GB",
+    "ram": "128 GB, 8-channel DDR4-3200"
+  },
+  "runtime": {
+    "base_repository_commit": "99d924ad6a08c58c01c41610be84ca046387de5d",
+    "deployment": "Pinned native vLLM plus overlay; not a fresh container test",
+    "checkpoint_revision": "ef554143369a706525336f6b42a09094835dc077",
+    "cuda_p2p": "enabled in both directions",
+    "custom_all_reduce": false,
+    "allocator": "expandable_segments:True",
+    "overlay_hashes": {
+      "v1/worker/gpu/cudagraph_utils.py": "572b84ffe109b0619caa841d1f862849b285e2753aac56360344b0b0052e04d6",
+      "v1/worker/gpu/model_runner.py": "2af3afd338c50e4ec50e1158069661b1aa7320c6ebf7c93bc5e4c424ba1296d4",
+      "models/qwen3_8_flash_next/nvidia/ops/qsa.py": "c8b45be537fa33839f5ebc127c1f3f542193cfed024d435a63737d74a5bdda57"
+    },
+    "note": "Integration probes had both the separate PLE capture fix and this QSA allocation fix installed."
+  },
+  "protocol": {
+    "benchmark_client_sha256": "f5699b249c15b3fb1a2693db59a92fce9e7a64ac13977595a4c7b9b51bd6e804",
+    "prompt_style": "repo-chat",
+    "prompt_corpus_base_commit": "99d924ad6a08c58c01c41610be84ca046387de5d",
+    "source": "Public benchmark_serving.py and 27-file overlay corpus from the September 5 checkout; not the expanded PR overlay corpus.",
+    "sampling": "temperature=0, ignore_eos=true, fresh cache_salt each request",
+    "smoke": [
+      128,
+      512
+    ],
+    "warmup": [
+      128,
+      4096
+    ],
+    "short": {
+      "shape": [
+        128,
+        4096
+      ],
+      "runs": 3
+    },
+    "long": {
+      "shape": [
+        258048,
+        4096
+      ],
+      "runs": 1
+    },
+    "all_exact_counts_passed": true,
+    "all_input_hashes_identical_across_profiles": true,
+    "metric": "Reciprocal mean API-observed post-first-chunk TPOT; short averages exclude smoke and warmup."
+  },
+  "limits": [
+    "One long request per profile; three short requests do not isolate a precise intrinsic cache-size penalty.",
+    "Generated continuations and MTP acceptance vary; temperature zero does not make these runs bitwise identical.",
+    "PLE remains partly swapped out, including reads during decode. Paging latency was not isolated.",
+    "Both runtime fixes were installed natively; no fresh Docker deployment or broad quality evaluation.",
+    "Long forced outputs include reasoning tokens. Basic text checks found no gross repetition; these are not completed-task quality scores."
+  ],
+  "results": [
+    {
+      "case": "hot88-longdecode",
+      "status": "complete",
+      "runs": [
+        {
+          "phase": "smoke",
+          "index": 0,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 512,
+          "decode_tps": 74.47910268440258,
+          "tpot_s": 0.013426584960849967,
+          "ttft_s": 1.0526980930007994,
+          "mtp_acceptance_pct": 52.166666666666664,
+          "drafted_tokens": 600,
+          "accepted_draft_tokens": 313,
+          "draft_cycles": 200,
+          "postfirst_ms_per_draft_cycle": 34.304924574971665,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 9003,
+            "pswpout": 0,
+            "pgmajfault": 8740
+          },
+          "decode_512token_windows_tps": [
+            74.47910268440258
+          ],
+          "maximum_output_gap_s": 0.055320200001006015,
+          "output_token_ids_sha256": "42b0e54389bc7909487684b8ed4add783854209231816ed1fbbbea3a57af2941",
+          "text_audit": {
+            "characters": 2429,
+            "words": 316,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "warmup",
+          "index": 1,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 73.66026883814042,
+          "tpot_s": 0.013575839672773657,
+          "ttft_s": 0.9108831629855558,
+          "mtp_acceptance_pct": 51.385442514474775,
+          "drafted_tokens": 4836,
+          "accepted_draft_tokens": 2485,
+          "draft_cycles": 1612,
+          "postfirst_ms_per_draft_cycle": 34.48701207196534,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 47818,
+            "pswpout": 0,
+            "pgmajfault": 46137
+          },
+          "decode_512token_windows_tps": [
+            76.64815957801441,
+            66.96679002920176,
+            74.86071731489042,
+            71.08759286706861,
+            77.37572413488921,
+            71.61951073269991,
+            79.01686233396752,
+            73.18007377892353
+          ],
+          "maximum_output_gap_s": 0.105684135996853,
+          "output_token_ids_sha256": "68579ce17cc680b28b82b1e2c31baa7f071c50d7cb1f9f5e1b5387c28d56e579",
+          "text_audit": {
+            "characters": 13639,
+            "words": 1948,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "short",
+          "index": 2,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 78.0623002862606,
+          "tpot_s": 0.01281028097215841,
+          "ttft_s": 0.9074474270018982,
+          "mtp_acceptance_pct": 52.08594075928244,
+          "drafted_tokens": 4794,
+          "accepted_draft_tokens": 2497,
+          "draft_cycles": 1598,
+          "postfirst_ms_per_draft_cycle": 32.82734704692658,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 32201,
+            "pswpout": 0,
+            "pgmajfault": 31078
+          },
+          "decode_512token_windows_tps": [
+            73.44730029803729,
+            81.8282595240904,
+            68.59370628524466,
+            70.3834294478007,
+            84.19844625213132,
+            83.52775265790795,
+            77.92825403962051,
+            89.60963052793593
+          ],
+          "maximum_output_gap_s": 0.06704813800752163,
+          "output_token_ids_sha256": "d5b5af7e355e6bfeb455b792918aae1075f7e7d5d0914adecb99088470c7daa8",
+          "text_audit": {
+            "characters": 13621,
+            "words": 1987,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "short",
+          "index": 3,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 80.0226125901466,
+          "tpot_s": 0.012496467781197297,
+          "ttft_s": 0.9089443020056933,
+          "mtp_acceptance_pct": 54.73118279569893,
+          "drafted_tokens": 4650,
+          "accepted_draft_tokens": 2545,
+          "draft_cycles": 1550,
+          "postfirst_ms_per_draft_cycle": 33.014861654195435,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 24772,
+            "pswpout": 0,
+            "pgmajfault": 24068
+          },
+          "decode_512token_windows_tps": [
+            84.00657079719814,
+            78.30069754504122,
+            77.77475322432834,
+            77.35254805518508,
+            76.37719835536878,
+            72.38620493974176,
+            89.78971882817271,
+            87.167888597572
+          ],
+          "maximum_output_gap_s": 0.06134608099819161,
+          "output_token_ids_sha256": "b9d29e5f4b88c0c1d1474f0528ba764f99c3706e1cc73d4dd438d91587e68960",
+          "text_audit": {
+            "characters": 12920,
+            "words": 1862,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "short",
+          "index": 4,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 78.68942974210619,
+          "tpot_s": 0.012708187151404742,
+          "ttft_s": 0.9089935249940027,
+          "mtp_acceptance_pct": 53.04659498207885,
+          "drafted_tokens": 4743,
+          "accepted_draft_tokens": 2516,
+          "draft_cycles": 1581,
+          "postfirst_ms_per_draft_cycle": 32.91589271663657,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 22048,
+            "pswpout": 0,
+            "pgmajfault": 21252
+          },
+          "decode_512token_windows_tps": [
+            77.39473639584574,
+            82.18483918058361,
+            77.37402932862264,
+            73.6167526563823,
+            76.58118570265924,
+            75.4201806266608,
+            84.41276720510776,
+            84.00886243265384
+          ],
+          "maximum_output_gap_s": 0.06305536699073855,
+          "output_token_ids_sha256": "7f0948bb1b04c5177b13c30c3a0e7c724e5aa0290457d1a089ce7d4432409fa3",
+          "text_audit": {
+            "characters": 13003,
+            "words": 1822,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "long",
+          "index": 5,
+          "status": "ok",
+          "input_tokens": 258048,
+          "output_tokens": 4096,
+          "decode_tps": 77.49678755273546,
+          "tpot_s": 0.01290376067936383,
+          "ttft_s": 213.97415829300007,
+          "mtp_acceptance_pct": 56.86274509803921,
+          "drafted_tokens": 4539,
+          "accepted_draft_tokens": 2581,
+          "draft_cycles": 1514,
+          "postfirst_ms_per_draft_cycle": 34.901519142665045,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 798538,
+            "pswpout": 0,
+            "pgmajfault": 793264
+          },
+          "decode_512token_windows_tps": [
+            89.27601866952521,
+            81.4244723401071,
+            71.748825795825,
+            83.55784004118611,
+            88.76521986434419,
+            74.5224123785873,
+            78.17955101041977,
+            61.08736645511054
+          ],
+          "maximum_output_gap_s": 1.481730047002202,
+          "output_token_ids_sha256": "30bcea23d6c31d1be9f4c1578b62f83029e043c372a1eca889bc0e96a88c1ce8",
+          "text_audit": {
+            "characters": 13699,
+            "words": 2020,
+            "most_repeated_12word_count": 1
+          }
+        }
+      ],
+      "short_reciprocal_mean_tpot_tps": 78.91635033966539,
+      "short_range_tps": [
+        78.0623002862606,
+        80.0226125901466
+      ],
+      "short_median_tps": 78.68942974210619,
+      "allocator_retry_warnings": {
+        "loading": 2,
+        "inference": 2
+      },
+      "peak_cpu_c": 84,
+      "peak_gpu_c": [
+        72,
+        77
+      ],
+      "peak_gpu_w": [
+        298.76,
+        298.89
+      ],
+      "minimum_available_ram_gib": 21.051067352294922,
+      "prompt_hashes": {
+        "128": "fec31ea7cf8251aefcc9a29d95523c073c423280e2e465d90c21f2714960677a",
+        "258048": "b010cbbbe0b190839864a7d22b5c61f09caca6dbc1987acaeeb450c17ae067f2"
+      },
+      "settings": {
+        "DISABLE_CUSTOM_ALL_REDUCE": "1",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "88",
+        "KV_CACHE_MEMORY_BYTES": "4429185024",
+        "MAX_MODEL_LEN": "262144",
+        "MAX_NUM_SEQS": "1",
+        "MAX_NUM_BATCHED_TOKENS": "4096"
+      },
+      "cleanup": "Server stopped normally; temporary loading swap removed"
+    },
+    {
+      "case": "hot86-longdecode",
+      "status": "complete",
+      "runs": [
+        {
+          "phase": "smoke",
+          "index": 0,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 512,
+          "decode_tps": 72.01147446900312,
+          "tpot_s": 0.013886675802346524,
+          "ttft_s": 1.084439892001683,
+          "mtp_acceptance_pct": 50.65359477124183,
+          "drafted_tokens": 612,
+          "accepted_draft_tokens": 310,
+          "draft_cycles": 204,
+          "postfirst_ms_per_draft_cycle": 34.78476144607389,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 9428,
+            "pswpout": 0,
+            "pgmajfault": 9211
+          },
+          "decode_512token_windows_tps": [
+            72.01147446900312
+          ],
+          "maximum_output_gap_s": 0.06309842699556611,
+          "output_token_ids_sha256": "6974f7e5da304f77d4fa3084d4dae8e4a70e8b0a2b98e05ac679ae7161ffb2e5",
+          "text_audit": {
+            "characters": 2392,
+            "words": 305,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "warmup",
+          "index": 1,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 80.08969624309749,
+          "tpot_s": 0.012486000658120671,
+          "ttft_s": 0.91261625700281,
+          "mtp_acceptance_pct": 57.55156353958749,
+          "drafted_tokens": 4509,
+          "accepted_draft_tokens": 2595,
+          "draft_cycles": 1503,
+          "postfirst_ms_per_draft_cycle": 34.01874430805333,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 38807,
+            "pswpout": 0,
+            "pgmajfault": 37395
+          },
+          "decode_512token_windows_tps": [
+            73.3578913622149,
+            73.41166141741951,
+            73.40874266135422,
+            86.596241263906,
+            81.08545584996178,
+            86.58621121947408,
+            78.4356656847744,
+            92.3242389961266
+          ],
+          "maximum_output_gap_s": 0.10842355599743314,
+          "output_token_ids_sha256": "5372779a7beb8d3bd3294e7663267fd3581faf31d50461b1ee4f518156f81933",
+          "text_audit": {
+            "characters": 12935,
+            "words": 1884,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "short",
+          "index": 2,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 78.9936150571055,
+          "tpot_s": 0.012659250994869486,
+          "ttft_s": 0.9098519730032422,
+          "mtp_acceptance_pct": 54.60399227301996,
+          "drafted_tokens": 4659,
+          "accepted_draft_tokens": 2544,
+          "draft_cycles": 1553,
+          "postfirst_ms_per_draft_cycle": 33.38031733676146,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 33749,
+            "pswpout": 0,
+            "pgmajfault": 32547
+          },
+          "decode_512token_windows_tps": [
+            76.2292302872764,
+            79.19810224124473,
+            76.8998526485583,
+            79.19680614457688,
+            77.25864936741505,
+            75.76497599731712,
+            72.6674359554288,
+            100.17583601307854
+          ],
+          "maximum_output_gap_s": 0.06601507699815556,
+          "output_token_ids_sha256": "d3680fa799121fb197080df6daf208541220f1c5b1ae754123d5ccd809c2d359",
+          "text_audit": {
+            "characters": 13289,
+            "words": 1843,
+            "most_repeated_12word_count": 1
+          }
+        },
+        {
+          "phase": "short",
+          "index": 3,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 76.25095778730066,
+          "tpot_s": 0.013114589364102999,
+          "ttft_s": 0.9041143189970171,
+          "mtp_acceptance_pct": 50.532350532350534,
+          "drafted_tokens": 4884,
+          "accepted_draft_tokens": 2468,
+          "draft_cycles": 1628,
+          "postfirst_ms_per_draft_cycle": 32.98786452457112,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 31715,
+            "pswpout": 0,
+            "pgmajfault": 30983
+          },
+          "decode_512token_windows_tps": [
+            77.55396291931245,
+            70.34291122435363,
+            81.986611400389,
+            79.24023275162092,
+            74.10216588588375,
+            86.79848352966661,
+            67.81186864803082,
+            75.69034565370427
+          ],
+          "maximum_output_gap_s": 0.06245525799749885,
+          "output_token_ids_sha256": "835b7a44a181f6f72a98dca8f4fec5484f1a264d0823ad0dd9b97ea8ede765df",
+          "text_audit": {
+            "characters": 14772,
+            "words": 2039,
+            "most_repeated_12word_count": 2
+          }
+        },
+        {
+          "phase": "short",
+          "index": 4,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 73.15522132460899,
+          "tpot_s": 0.01366956427570271,
+          "ttft_s": 0.9094103859970346,
+          "mtp_acceptance_pct": 48.52118305355715,
+          "drafted_tokens": 5004,
+          "accepted_draft_tokens": 2428,
+          "draft_cycles": 1668,
+          "postfirst_ms_per_draft_cycle": 33.55927200779532,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 30840,
+            "pswpout": 0,
+            "pgmajfault": 30425
+          },
+          "decode_512token_windows_tps": [
+            74.41728126774849,
+            74.11316434590418,
+            73.56485402762726,
+            80.08658412831745,
+            74.05103770518505,
+            69.68897821427197,
+            70.93960972932278,
+            69.42053751952405
+          ],
+          "maximum_output_gap_s": 0.06403769399912562,
+          "output_token_ids_sha256": "d990dec41040e10804c8ccee7135e3290173b4244d76ebbda8b12cc3c38ad015",
+          "text_audit": {
+            "characters": 14568,
+            "words": 2163,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 56.03621768951416,
+            "swap_in_mib": 120.23046875,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              35.20808792114258,
+              35.0992317199707
+            ],
+            "boundary_error_s": [
+              0.20401692390441895,
+              0.263369083404541
+            ]
+          }
+        },
+        {
+          "phase": "long",
+          "index": 5,
+          "status": "ok",
+          "input_tokens": 258048,
+          "output_tokens": 4096,
+          "decode_tps": 77.66767942110991,
+          "tpot_s": 0.012875368589011843,
+          "ttft_s": 214.1530153319909,
+          "mtp_acceptance_pct": 60.99078341013825,
+          "drafted_tokens": 4340,
+          "accepted_draft_tokens": 2647,
+          "draft_cycles": 1447,
+          "postfirst_ms_per_draft_cycle": 36.437204127162055,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 794289,
+            "pswpout": 0,
+            "pgmajfault": 790844
+          },
+          "decode_512token_windows_tps": [
+            94.05221012363069,
+            73.52079038770326,
+            76.64393902042386,
+            71.57824253436617,
+            74.60847364418852,
+            78.031732934833,
+            76.1595861302341,
+            80.64756377167296
+          ],
+          "maximum_output_gap_s": 0.147319650001009,
+          "output_token_ids_sha256": "b177ae562aac341b819f0072ad30c4576484ddfa904c47d9fbda50a22a8dd27a",
+          "text_audit": {
+            "characters": 15155,
+            "words": 1799,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 53.02694606781006,
+            "swap_in_mib": 120.2421875,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              32.24964904785156,
+              32.13677978515625
+            ],
+            "boundary_error_s": [
+              0.13949894905090332,
+              0.44181060791015625
+            ]
+          }
+        }
+      ],
+      "short_reciprocal_mean_tpot_tps": 76.0583430306283,
+      "short_range_tps": [
+        73.15522132460899,
+        78.9936150571055
+      ],
+      "short_median_tps": 76.25095778730066,
+      "allocator_retry_warnings": {
+        "loading": 2,
+        "inference": 2
+      },
+      "peak_cpu_c": 84.125,
+      "peak_gpu_c": [
+        72,
+        78
+      ],
+      "peak_gpu_w": [
+        298.33,
+        299.11
+      ],
+      "minimum_available_ram_gib": 23.38692855834961,
+      "prompt_hashes": {
+        "128": "fec31ea7cf8251aefcc9a29d95523c073c423280e2e465d90c21f2714960677a",
+        "258048": "b010cbbbe0b190839864a7d22b5c61f09caca6dbc1987acaeeb450c17ae067f2"
+      },
+      "settings": {
+        "DISABLE_CUSTOM_ALL_REDUCE": "1",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "86",
+        "KV_CACHE_MEMORY_BYTES": "4429185024",
+        "MAX_MODEL_LEN": "262144",
+        "MAX_NUM_SEQS": "1",
+        "MAX_NUM_BATCHED_TOKENS": "4096"
+      },
+      "cleanup": "Server stopped normally; temporary loading swap removed"
+    },
+    {
+      "case": "hot84-longdecode",
+      "status": "complete",
+      "runs": [
+        {
+          "phase": "smoke",
+          "index": 0,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 512,
+          "decode_tps": 67.63650237096122,
+          "tpot_s": 0.014784915909982594,
+          "ttft_s": 1.0771647119981935,
+          "mtp_acceptance_pct": 46.573208722741434,
+          "drafted_tokens": 642,
+          "accepted_draft_tokens": 299,
+          "draft_cycles": 214,
+          "postfirst_ms_per_draft_cycle": 35.30416836449115,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 10143,
+            "pswpout": 0,
+            "pgmajfault": 9801
+          },
+          "decode_512token_windows_tps": [
+            67.63650237096122
+          ],
+          "maximum_output_gap_s": 0.06305077599245124,
+          "output_token_ids_sha256": "3365b8231173d49eb078ca598c36b4c7e9ffe9866b9f80fd2957e552f8921464",
+          "text_audit": {
+            "characters": 2267,
+            "words": 307,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 8.003960847854614,
+            "swap_in_mib": 33.515625,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              35.55266189575195,
+              35.52360153198242
+            ],
+            "boundary_error_s": [
+              -0.1718578338623047,
+              0.2770109176635742
+            ]
+          }
+        },
+        {
+          "phase": "warmup",
+          "index": 1,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 75.52581878572455,
+          "tpot_s": 0.013240505248107475,
+          "ttft_s": 0.9115583219972905,
+          "mtp_acceptance_pct": 54.63917525773196,
+          "drafted_tokens": 4656,
+          "accepted_draft_tokens": 2544,
+          "draft_cycles": 1552,
+          "postfirst_ms_per_draft_cycle": 34.935482597293884,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 42910,
+            "pswpout": 0,
+            "pgmajfault": 41321
+          },
+          "decode_512token_windows_tps": [
+            74.27547176427285,
+            74.27156374158906,
+            75.61688167390105,
+            85.35465877165664,
+            71.61645298024594,
+            67.7975146688747,
+            71.84711181735616,
+            87.5824055145884
+          ],
+          "maximum_output_gap_s": 0.10773843599599786,
+          "output_token_ids_sha256": "a60b71521a7dc045e410e278e8495fa2eafe73b864fecc7f1c3ff73b00d47d15",
+          "text_audit": {
+            "characters": 13338,
+            "words": 1922,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 54.0259575843811,
+            "swap_in_mib": 167.4140625,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              35.52360153198242,
+              35.37295150756836
+            ],
+            "boundary_error_s": [
+              0.2991511821746826,
+              0.1052398681640625
+            ]
+          }
+        },
+        {
+          "phase": "short",
+          "index": 2,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 70.88988019837639,
+          "tpot_s": 0.01410638580854737,
+          "ttft_s": 0.9149996869964525,
+          "mtp_acceptance_pct": 47.24517906336088,
+          "drafted_tokens": 5082,
+          "accepted_draft_tokens": 2401,
+          "draft_cycles": 1694,
+          "postfirst_ms_per_draft_cycle": 34.10014751239757,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 39389,
+            "pswpout": 0,
+            "pgmajfault": 38167
+          },
+          "decode_512token_windows_tps": [
+            73.22960814522023,
+            67.89375424676957,
+            74.08060381999738,
+            69.54018951194844,
+            72.65114216863707,
+            70.35212699921651,
+            69.04089492350424,
+            70.77896822189138
+          ],
+          "maximum_output_gap_s": 0.0634410849888809,
+          "output_token_ids_sha256": "892dca8fa05b2df3fa6b5c6bc4480d6bb196a75d21a9d01ca39d8e86ae1d10d0",
+          "text_audit": {
+            "characters": 13815,
+            "words": 2067,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 58.02912998199463,
+            "swap_in_mib": 153.69140625,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              35.37295150756836,
+              35.23135757446289
+            ],
+            "boundary_error_s": [
+              0.1268291473388672,
+              0.39030933380126953
+            ]
+          }
+        },
+        {
+          "phase": "short",
+          "index": 3,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 76.94327587788743,
+          "tpot_s": 0.012996587272772824,
+          "ttft_s": 0.9122489400033373,
+          "mtp_acceptance_pct": 53.88711395101171,
+          "drafted_tokens": 4695,
+          "accepted_draft_tokens": 2530,
+          "draft_cycles": 1565,
+          "postfirst_ms_per_draft_cycle": 34.00704465303816,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 25858,
+            "pswpout": 0,
+            "pgmajfault": 25030
+          },
+          "decode_512token_windows_tps": [
+            80.61019327941821,
+            79.94514874666424,
+            80.8646680547378,
+            69.35910593298641,
+            72.24595071566925,
+            79.24258989686324,
+            77.48942275790908,
+            77.47122692869675
+          ],
+          "maximum_output_gap_s": 0.07091814999876078,
+          "output_token_ids_sha256": "daec5a604941aec89aaf32fe2649563427680602181fd6c7da828a9954cbe70d",
+          "text_audit": {
+            "characters": 13900,
+            "words": 2029,
+            "most_repeated_12word_count": 2
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 53.03039860725403,
+            "swap_in_mib": 100.9921875,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              35.23135757446289,
+              35.13770294189453
+            ],
+            "boundary_error_s": [
+              0.4149196147918701,
+              0.22429323196411133
+            ]
+          }
+        },
+        {
+          "phase": "short",
+          "index": 4,
+          "status": "ok",
+          "input_tokens": 128,
+          "output_tokens": 4096,
+          "decode_tps": 80.1880560248359,
+          "tpot_s": 0.012470685156531033,
+          "ttft_s": 0.9064479369990295,
+          "mtp_acceptance_pct": 55.51941010626762,
+          "drafted_tokens": 4611,
+          "accepted_draft_tokens": 2560,
+          "draft_cycles": 1537,
+          "postfirst_ms_per_draft_cycle": 33.225410355233954,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 21971,
+            "pswpout": 0,
+            "pgmajfault": 21166
+          },
+          "decode_512token_windows_tps": [
+            79.58783484457429,
+            76.92870525746753,
+            78.39718880969775,
+            78.07672465149285,
+            88.82667826197583,
+            78.5586334356079,
+            78.08788102926822,
+            84.43133922605024
+          ],
+          "maximum_output_gap_s": 0.05985948399757035,
+          "output_token_ids_sha256": "ded193e5d4c131b3d6cbbf5aa3c185ce79cca4ed6e648ae6f0984bc9f7803bfd",
+          "text_audit": {
+            "characters": 12105,
+            "words": 1710,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 51.03059673309326,
+            "swap_in_mib": 85.7421875,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              35.13765335083008,
+              35.05908966064453
+            ],
+            "boundary_error_s": [
+              0.2488858699798584,
+              0.21202683448791504
+            ]
+          }
+        },
+        {
+          "phase": "long",
+          "index": 5,
+          "status": "ok",
+          "input_tokens": 258048,
+          "output_tokens": 4096,
+          "decode_tps": 77.5897408813835,
+          "tpot_s": 0.012888301837852058,
+          "ttft_s": 215.80187117100286,
+          "mtp_acceptance_pct": 55.2,
+          "drafted_tokens": 4625,
+          "accepted_draft_tokens": 2553,
+          "draft_cycles": 1542,
+          "postfirst_ms_per_draft_cycle": 34.22671597017132,
+          "preemptions": 0,
+          "vmstat_deltas": {
+            "pswpin": 799425,
+            "pswpout": 0,
+            "pgmajfault": 795534
+          },
+          "decode_512token_windows_tps": [
+            86.78229434719145,
+            66.9768292466735,
+            75.56999304229907,
+            71.04953785561423,
+            72.55806512406721,
+            85.95055040999588,
+            85.36792908608584,
+            81.89547881641062
+          ],
+          "maximum_output_gap_s": 0.11519096599658951,
+          "output_token_ids_sha256": "7052c6c2f510d480ca1909c43d727ad8468685864a9faccd5a7c004dc6aa5f77",
+          "text_audit": {
+            "characters": 13496,
+            "words": 2033,
+            "most_repeated_12word_count": 1
+          },
+          "decode_only_paging_approx": {
+            "sample_seconds": 52.02623724937439,
+            "swap_in_mib": 131.7109375,
+            "swap_out_mib": 0,
+            "ple_swap_start_end_gib": [
+              32.19750213623047,
+              32.07413101196289
+            ],
+            "boundary_error_s": [
+              0.43560028076171875,
+              -0.31575870513916016
+            ]
+          }
+        }
+      ],
+      "short_reciprocal_mean_tpot_tps": 75.80800293894927,
+      "short_range_tps": [
+        70.88988019837639,
+        80.1880560248359
+      ],
+      "short_median_tps": 76.94327587788743,
+      "allocator_retry_warnings": {
+        "loading": 2,
+        "inference": 0
+      },
+      "peak_cpu_c": 82.375,
+      "peak_gpu_c": [
+        72,
+        78
+      ],
+      "peak_gpu_w": [
+        296.97,
+        298.29
+      ],
+      "minimum_available_ram_gib": 14.488666534423828,
+      "prompt_hashes": {
+        "128": "fec31ea7cf8251aefcc9a29d95523c073c423280e2e465d90c21f2714960677a",
+        "258048": "b010cbbbe0b190839864a7d22b5c61f09caca6dbc1987acaeeb450c17ae067f2"
+      },
+      "settings": {
+        "DISABLE_CUSTOM_ALL_REDUCE": "1",
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "84",
+        "KV_CACHE_MEMORY_BYTES": "4429185024",
+        "MAX_MODEL_LEN": "262144",
+        "MAX_NUM_SEQS": "1",
+        "MAX_NUM_BATCHED_TOKENS": "4096"
+      },
+      "cleanup": "Server stopped normally; temporary loading swap removed"
+    }
+  ]
+}

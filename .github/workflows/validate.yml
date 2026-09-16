@@ -29,5 +29,9 @@ jobs:
           python -m compileall -q
           scripts runtime/install_overlay.py runtime/vllm-overlay
           tests
+      - name: Test QSA workspace allocation
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m unittest discover -s tests -p 'test_qsa_workspace.py' -v
       - name: Check shell syntax
         run: bash -n scripts/*.sh
