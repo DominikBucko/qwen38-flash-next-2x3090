@@ -5,7 +5,7 @@
 Use [`configs/2x3090-128gb.env`](../configs/2x3090-128gb.env) and
 [`scripts/serve-container.sh`](../scripts/serve-container.sh) unchanged for the
 first successful run. That combination is the tested 2× RTX 3090, 128 GB RAM,
-single-request profile. It selects TP2/EP2, an 88-expert GPU cache, approximate
+single-request profile. It selects TP2/EP2, an 84-expert GPU cache, approximate
 QSA, MTP depth 3, chunked prefill, BF16 KV, and a 262,144-token limit.
 
 There is no globally “fastest” setting. Prefill, short decode, decode after a
@@ -28,7 +28,8 @@ CUDA P2P worked in both directions. The environment was clean pinned vendor
 vLLM plus the public overlay using existing native dependencies, not a fresh
 Docker build. All 27 model weight files matched the published SHA-256 manifest
 for canonical tensor revision `ef554143369a706525336f6b42a09094835dc077`.
-These candidate overrides do not replace the released 88/1/True defaults.
+The current defaults are 84/1/True. Only the cache size matches this historical
+candidate; its custom collective and allocator choices remain experimental.
 
 | Public recipe | Exact shape and run policy | API-observed output speed | TTFT |
 |---|---|---:|---:|
@@ -176,17 +177,22 @@ Keep `MAX_NUM_SEQS=1`, `MAX_MODEL_LEN=262144`, and the explicit KV allocation.
 Any change must still complete 262,016 input plus 128 output without a stream
 error. A short prompt succeeding does not verify full-context compatibility.
 
-The 88-slot expert cache is smaller than some short-context hillclimb settings
+The 84-slot expert cache is smaller than some short-context hillclimb settings
 because the full-context KV state and transient buffers need VRAM too. A larger
 cache may improve short decode and then fail at 262K.
 
 ### Reduce VRAM pressure
 
-Follow the released recovery order: lower
-`VLLM_WNA16_STATIC_HOT_CACHE_SIZE` from 88 to 86, then 84; only then consider
+Check that an older `.env` is not still selecting hot88. Start with
+`VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84`, then try 80 if needed; only then consider
 lowering `KV_CACHE_MEMORY_BYTES` from 4,429,185,024 to 4,294,967,296. Confirm the
 startup `GPU KV cache size:` line still covers the target length. Lowering
 `MAX_MODEL_LEN` alone does not release the explicit KV pool.
+
+Hot88 remains available as an explicit override. It may help some short-decode
+workloads, but the September 16 sweep found similar near-full-context rates
+with hot88, hot86, and hot84. Hot84 had no inference allocation retries in that
+sweep. See [the comparison](../benchmarks/2026-09-16/qsa-memory.md).
 
 If the first prompt OOMs, lowering `MAX_NUM_BATCHED_TOKENS` from 4,096 to 2,048
 can reduce prefill temporaries, with lower prefill throughput. See

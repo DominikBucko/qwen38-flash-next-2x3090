@@ -4,7 +4,7 @@
 
 | Component | Representation | Placement while serving |
 |---|---|---|
-| Target routed experts and eligible linear weights | Intel AutoRound W4A16 | 88 hot experts per layer on GPU; all experts accessible via UVA host memory |
+| Target routed experts and eligible linear weights | Intel AutoRound W4A16 | 84 hot experts per layer on GPU; all experts accessible via UVA host memory |
 | Sensitive target layers | Intel BF16, unchanged | GPU and configured vLLM offload path |
 | 51.2B-parameter n-gram/PLE table | RadixArk FP8 E4M3FN + published scale | Host RAM, fetched through PLE offload workers |
 | KV cache | BF16 | Approximately 4.13 GiB per GPU for the validated one-sequence profile |

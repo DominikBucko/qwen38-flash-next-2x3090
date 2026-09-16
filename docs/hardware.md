@@ -40,9 +40,10 @@ The measured candidate used an 84-expert hot cache, custom all-reduce enabled,
 and `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False`. It completed three
 exact-count `repo-chat` requests of 258,048 input + 4,096 output at a 75.636
 tok/s reciprocal-mean aggregate. Four recoverable allocator warnings appeared
-during the first long prefill, with no stream failures. The released Docker
-defaults remain an 88-expert cache, custom all-reduce disabled, and expandable
-segments enabled. See the [September 5 benchmark bundle](../benchmarks/2026-09-05/README.md)
+during the first long prefill, with no stream failures. The current Docker
+defaults use an 84-expert cache, custom all-reduce disabled, and expandable
+segments enabled. This is not the same profile as that earlier candidate.
+See the [September 5 benchmark bundle](../benchmarks/2026-09-05/README.md)
 and [machine-readable summary](../benchmarks/2026-09-05/summary.json).
 
 All 27 model weight files on this host matched the published SHA-256 manifest
@@ -69,7 +70,7 @@ The two 3090s provide 48 GB in aggregate, but CUDA still exposes two separate
 24 GB address spaces. Tensor parallelism splits one model instance across both
 cards; it does not pool them into a general-purpose 48 GB allocation. The
 released profile also creates a BF16 KV allocation of about 4.13 GiB on each
-GPU and keeps 88 hot experts per layer on GPU.
+GPU and keeps 84 hot experts per layer on GPU.
 
 An allocation that must fit on one rank is still limited by that rank's free
 VRAM. Both cards therefore need adequate headroom. One card cannot substitute
@@ -208,8 +209,9 @@ memory, and disk activity before assuming a deadlock.
 ### What should I change after an OOM?
 
 First identify the memory pool. A kernel OOM while loading points to host RAM or
-swap; a `torch.OutOfMemoryError` points to VRAM. For VRAM, lower the hot cache
-from 88 to 86, then 84. If necessary, reduce the explicit KV allocation to
+swap; a `torch.OutOfMemoryError` points to VRAM. For VRAM, check that an older
+`.env` is not still selecting hot88. Start with the current hot84 default;
+try hot80 if more headroom is needed. If necessary, reduce the explicit KV allocation to
 4,294,967,296 bytes and confirm the startup log still reports the context
 capacity you need. The exact order and tradeoffs are in
 [Memory sizing and OOM recovery](memory.md).

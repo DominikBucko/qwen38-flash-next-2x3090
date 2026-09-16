@@ -33,11 +33,10 @@ the file works. Do not run these commands over an existing file. Btrfs, ZFS,
 encrypted-root, and network-backed filesystems can require different swapfile
 setup; follow the filesystem's own documentation.
 
-The profile loads tensor-parallel ranks with
-`--max-parallel-loading-workers 1`, but the target loader and PLE worker still
-overlap. A machine can therefore run out of host memory before the server is
-ready. Slow progress through the 25 checkpoint shards is normal when the host
-is under memory pressure.
+The profile passes `--max-parallel-loading-workers 1`, but the pinned runtime
+ignores that option. The target loader and PLE worker overlap, so a machine can
+run out of host memory before the server is ready. Slow progress through the
+25 checkpoint shards is normal when the host is under memory pressure.
 
 Configured or allocated swap is not automatically a serving failure. Continuous
 swap traffic is. Watch `vmstat 1` while generating: persistent nonzero `si` or
@@ -45,12 +44,12 @@ swap traffic is. Watch `vmstat 1` while generating: persistent nonzero `si` or
 
 ## GPU memory
 
-The released 256K profile is deliberately tight. Its main adjustable users of
-VRAM are:
+The default 256K profile uses hot84. Hot88 is an optional, tighter profile.
+The main adjustable users of VRAM are:
 
 | Setting | Released value | Lower-memory value | Tradeoff |
 |---|---:|---:|---|
-| `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` | 88 | 86, then 84 | Saves about 116 MiB per removed slot on each GPU; more expert misses reduce decode speed. |
+| `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` | 84 | 80 | Saves about 116 MiB per removed slot on each GPU; more expert misses can reduce decode speed. |
 | `KV_CACHE_MEMORY_BYTES` | 4,429,185,024 | 4,294,967,296 | Saves 128 MiB per GPU; verify that reported KV capacity remains at least 262,144 tokens. |
 | `MAX_NUM_BATCHED_TOKENS` | 4,096 | 2,048 | Reduces prefill temporary tensors; lowers prefill throughput. |
 
@@ -61,8 +60,10 @@ at once. This changes temporary storage, not weight precision, attention top-k,
 or the number of visible keys. It does not remove the memory needed by other
 prefill operations, so hot88 can still be too tight on some hosts.
 
-If hot88 OOMs, use `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84` first. This frees about
-464 MiB of expert storage per GPU without reducing context or model precision.
+Hot84 frees about
+464 MiB of expert storage per GPU compared with hot88, without reducing context
+or model precision. Existing `.env` files must be updated explicitly; rebuilding
+does not override a value of `88` supplied by the user.
 Experts that are not cached on the GPU are still available from RAM. With the
 patched runtime, hot84 passed a 262,016-input + 128-output request as the first
 request after startup, then two shorter requests, with no inference-time
@@ -71,6 +72,11 @@ two recoverable retries during weight loading; that is a separate phase.
 These are native-runtime checks on one host, not a guarantee for every driver
 or display setup. The [validation record](../benchmarks/2026-09-16/qsa-memory.json)
 contains the settings and limits.
+
+The fresh Docker repeat also passed the same cold-256K-first sequence on hot84,
+with zero inference allocation retries and the full 276,313-token KV pool.
+No hot-cache or capacity overrides were supplied to that launch. See the
+[Docker record](../benchmarks/2026-09-16/docker-validation.json).
 
 The longer 4,096-output-token comparison measured 78.92 / 76.06 / 75.81 tok/s
 at short context for hot88 / hot86 / hot84. Near-full-context decode was
@@ -85,8 +91,8 @@ the model's quality contract.
 Use the failure location to choose the pool:
 
 - If the process is killed while loading shards and the kernel log contains an
-  out-of-memory kill, add host swap and keep
-  `MAX_PARALLEL_LOADING_WORKERS=1`.
+  out-of-memory kill, add host swap. Changing `MAX_PARALLEL_LOADING_WORKERS`
+  will not help with this pinned runtime.
 - If vLLM reports `torch.OutOfMemoryError` on a GPU during startup or the first
   prompt, reduce the hot cache first, then the explicit KV allocation.
 - If the server runs but `vmstat 1` shows sustained swap-in/swap-out during
@@ -153,6 +159,12 @@ requests were resident together; peak KV use was 97.1%, with zero preemptions.
 Small sequential and concurrent JSON/secret-isolation checks also passed.
 This was one native-runtime test, not a fresh Docker deployment or a broad
 quality evaluation. Rebuild and check capacity on your own host.
+
+A fresh Docker build also passed the same full-context pair: 97.1% peak KV use,
+zero preemptions, and no inference allocation retries. Overlapping decode was
+81.9 tok/s aggregate; the short 1,024-input + 2,048-output pair reached 93.0
+tok/s aggregate. Those are single capacity checks, not repeat-averaged speed
+claims. See the [Docker validation record](../benchmarks/2026-09-16/docker-validation.json).
 
 A 4 GiB pool (`4294967296`) reported only 240,510 tokens with two sequences in
 our pinned runtime. It cannot keep two full 131,072-token windows resident at
