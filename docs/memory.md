@@ -84,6 +84,12 @@ not return that reserved VRAM.
 
 ## Two concurrent requests
 
+Rebuild the container after updating the runtime overlay. Older images can hang
+halfway through CUDA graph capture when `MAX_NUM_SEQS=2`. The PLE dummy-output
+flag must be re-armed before each capture warmup, not just once before all graph
+shapes. The updated overlay fixes this handshake; restricting graph sizes is
+not required.
+
 Set `MAX_NUM_SEQS=2` to admit two requests. The KV pool is shared rather than
 split into two fixed halves, but this hybrid model also reserves recurrent state
 per sequence. At the same KV byte setting, increasing `MAX_NUM_SEQS` therefore
@@ -102,13 +108,31 @@ larger shared KV pool:
 ```dotenv
 MAX_NUM_SEQS=2
 MAX_MODEL_LEN=131072
+MAX_NUM_BATCHED_TOKENS=2048
 KV_CACHE_MEMORY_BYTES=4697620480
 VLLM_WNA16_STATIC_HOT_CACHE_SIZE=80
+MTP_DEPTH=3
 ```
+
+Put these overrides in the repository's `.env` file when using `make serve`,
+or export them before calling `scripts/docker_serve.sh`. Keep the usual
+`MODEL_DIR` setting. `KV_CACHE_MEMORY_BYTES` is per GPU in this TP2 setup; it is
+not a separate pool per client.
 
 This is a capacity-oriented profile, not the published single-stream speed
 profile. It admits two 128K windows and reported 263,416 KV-cache tokens in our
 test; aggregate decode still depends strongly on prompt mix and MTP acceptance.
+
+The September 16 integration check completed two distinct requests of 129,024
+input + 2,048 output tokens each, with MTP3 and the default graph sizes. Both
+requests were resident together; peak KV use was 97.1%, with zero preemptions.
+Small sequential and concurrent JSON/secret-isolation checks also passed.
+This was one native-runtime test, not a fresh Docker deployment or a broad
+quality evaluation. Rebuild and check capacity on your own host.
+
+A 4 GiB pool (`4294967296`) reported only 240,510 tokens with two sequences in
+our pinned runtime. It cannot keep two full 131,072-token windows resident at
+once. More admission slots do not create more KV capacity.
 
 Do not infer capacity from the configuration alone. The startup line beginning
 `GPU KV cache size:` is authoritative for that launch.

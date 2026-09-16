@@ -25,5 +25,7 @@
   "v1/ple_offload/connector.py": "1091f732cef40976ec1698b2cb5dfe8b433a561856fbb233ef113c1cf8511a73",
   "v1/ple_offload/protocol.py": "38706b843d0f59ca4e296fc799c4fb47e2560db001829028cd4c91151ff5628a",
   "v1/ple_offload/worker.py": "e5801810e125cf904248d7f9f90e723e39785280f204c52470db02d2254eb41a",
+  "v1/worker/gpu/cudagraph_utils.py": "572b84ffe109b0619caa841d1f862849b285e2753aac56360344b0b0052e04d6",
+  "v1/worker/gpu/model_runner.py": "2af3afd338c50e4ec50e1158069661b1aa7320c6ebf7c93bc5e4c424ba1296d4",
   "v1/worker/gpu_worker.py": "385f2efbf4814b2929137794d27754b083c1f81bc6b87d6d498735fdcd3e8e3b"
 }

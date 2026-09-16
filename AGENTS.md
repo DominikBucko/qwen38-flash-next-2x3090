@@ -573,6 +573,26 @@ index and the safetensors headers.
 
 ### Server appears hung during startup
 
+If two-client startup stops halfway through CUDA graph capture, check the PLE
+ready flag. Each eager capture warmup consumes that flag. Signalling it only
+once before the graph loop lets the next shape wait forever: no real CPU PLE
+request was submitted to signal it again. The capture hook in
+`v1/worker/gpu/cudagraph_utils.py`, supplied by `gpu/model_runner.py`, re-arms
+dummy outputs before every forward in the capture loop. Keep this hook when
+updating the pinned runtime. Limiting graph sizes can hide the bug by skipping
+target graphs; it is not equivalent to fixing the handshake.
+
+The September 16 test with hot80, two 131,072-token windows, a 4,697,620,480-byte
+KV pool per GPU, 2,048-token prefill chunks, and MTP3 passed default graph
+capture. Two distinct 129,024-input/2,048-output streams completed with zero
+preemptions. The pool reported 263,416 tokens. Both clients were resident at
+once, with 97.1% peak KV use. Small sequential/concurrent secret-isolation JSON
+checks passed. See `benchmarks/2026-09-16/concurrency.json` for the exact
+conditions. The 76.53 tok/s joint long-decode window is one probe, not a new
+headline: one client's earlier generation overlaps the other client's prefill,
+and near-boundary tail stalls remain visible. Do not add individual whole-
+request decode estimates to claim aggregate throughput.
+
 The CPU PLE worker has to load roughly half the checkpoint and register shared
 buffers. The ready timeout is 1,200 seconds for a reason. Check worker progress,
 resident memory, and actual disk reads before killing it. Do not confuse a long

@@ -1,0 +1,98 @@
+{
+  "purpose": "Issue regression checks, not a replacement for historical benchmark claims",
+  "date": "2026-09-16",
+  "hardware": {
+    "gpus": "2x RTX 3090 24 GB",
+    "ram": "128 GB, 8-channel DDR4-3200"
+  },
+  "runtime": {
+    "base_repository_commit": "99d924ad6a08c58c01c41610be84ca046387de5d",
+    "deployment": "Pinned native vLLM plus overlay; not a fresh container test",
+    "checkpoint_revision": "ef554143369a706525336f6b42a09094835dc077",
+    "cuda_p2p": "enabled in both directions",
+    "custom_all_reduce": false,
+    "allocator": "expandable_segments:True"
+  },
+  "issue_1": {
+    "fix": "Re-arm dummy PLE outputs before every target graph warmup and capture",
+    "overlay_hashes": {
+      "v1/worker/gpu/cudagraph_utils.py": "572b84ffe109b0619caa841d1f862849b285e2753aac56360344b0b0052e04d6",
+      "v1/worker/gpu/model_runner.py": "2af3afd338c50e4ec50e1158069661b1aa7320c6ebf7c93bc5e4c424ba1296d4",
+      "models/qwen3_8_flash_next/nvidia/ops/qsa.py": "528f27eb24deec93ded99193a46e98b23a0f353afc0a2a86e3385b0c0e2b0b8e"
+    },
+    "settings": {
+      "MAX_NUM_SEQS": 2,
+      "MAX_MODEL_LEN": 131072,
+      "MAX_NUM_BATCHED_TOKENS": 2048,
+      "KV_CACHE_MEMORY_BYTES": 4697620480,
+      "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": 80,
+      "MTP_DEPTH": 3
+    },
+    "gpu_kv_tokens": 263416,
+    "startup_seconds": 303.2,
+    "capture_seconds": 2,
+    "graph_capture_sizes": "default, not manually restricted",
+    "request_recipe": "repo-chat; second client rotates the public source corpus by half its characters; unique cache salt per request; greedy forced-length outputs",
+    "warmup_policy": "One short pair followed by one long pair; no repeated statistical runs",
+    "short": {
+      "requests": 2,
+      "input_tokens_each": 1024,
+      "output_tokens_each": 512,
+      "exact_counts_passed": true,
+      "ttft_seconds": [
+        4.351491301,
+        4.544668715
+      ],
+      "individual_post_first_chunk_tps": [
+        51.838957023,
+        56.969533868
+      ],
+      "overlapping_decode_seconds": 8.969706535,
+      "overlapping_output_tokens": [
+        467,
+        511
+      ],
+      "overlapping_aggregate_tps": 109.033667506
+    },
+    "full128k": {
+      "requests": 2,
+      "input_tokens_each": 129024,
+      "output_tokens_each": 2048,
+      "exact_counts_passed": true,
+      "wall_seconds": 406.868736744,
+      "ttft_seconds": [
+        354.467049253,
+        178.656649548
+      ],
+      "individual_post_first_chunk_tps_including_other_client_prefill": [
+        39.077421291,
+        9.074607617
+      ],
+      "overlapping_decode_seconds": 49.758762836,
+      "overlapping_output_tokens": [
+        1963,
+        1845
+      ],
+      "overlapping_aggregate_tps": 76.529233906,
+      "peak_kv_usage_fraction": 0.9708737864,
+      "preemptions": 0
+    },
+    "isolation_checks": {
+      "sequential": "2/2 passed",
+      "concurrent": "2/2 passed"
+    },
+    "limits": "Capacity and small functional checks only. Long outputs end during reasoning; no broad quality or sustained-throughput claim. One client's decode overlaps the other client's prefill.",
+    "peaks": {
+      "cpu_c": 80,
+      "gpu_c": [
+        70,
+        75
+      ],
+      "gpu_w": [
+        281.5,
+        294.51
+      ]
+    },
+    "cleanup": "Server stopped normally; temporary loading swap removed"
+  }
+}
