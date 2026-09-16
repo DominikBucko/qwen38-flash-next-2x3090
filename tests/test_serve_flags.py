@@ -56,6 +56,9 @@ class ServeFlagsTests(unittest.TestCase):
             "        'DISABLE_CUSTOM_ALL_REDUCE': os.environ.get('DISABLE_CUSTOM_ALL_REDUCE'),\n"
             "        'PYTORCH_CUDA_ALLOC_CONF': os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),\n"
             "        'VLLM_PLE_CPU_OFFLOAD': os.environ.get('VLLM_PLE_CPU_OFFLOAD'),\n"
+            "        'ENABLE_VISION': os.environ.get('ENABLE_VISION'),\n"
+            "        'VISION_MAX_IMAGES': os.environ.get('VISION_MAX_IMAGES'),\n"
+            "        'VISION_MAX_PIXELS': os.environ.get('VISION_MAX_PIXELS'),\n"
             "        'VLLM_WNA16_STATIC_HOT_CACHE_SIZE': os.environ.get('VLLM_WNA16_STATIC_HOT_CACHE_SIZE'),\n"
             "        'VLLM_WNA16_STATIC_HOT_CACHE_FILE': os.environ.get('VLLM_WNA16_STATIC_HOT_CACHE_FILE'),\n"
             "    }}, target)\n"
@@ -114,6 +117,8 @@ class ServeFlagsTests(unittest.TestCase):
         )
         env.pop("DISABLE_CUSTOM_ALL_REDUCE", None)
         env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+        for name in ("ENABLE_VISION", "VISION_MAX_IMAGES", "VISION_MAX_PIXELS"):
+            env.pop(name, None)
         env.update(settings or {})
         return subprocess.run(
             [str(ROOT / "scripts/docker_serve.sh")],
@@ -162,11 +167,25 @@ class ServeFlagsTests(unittest.TestCase):
         self.assertEqual(argv[argv.index("--max-model-len") + 1], "262144")
         self.assertEqual(json.loads(argv[argv.index("--speculative-config") + 1])[
             "num_speculative_tokens"], 3)
+        self.assertEqual(argv[argv.index("--mm-encoder-tp-mode") + 1], "weights")
+
+    def test_vision_limits_can_be_overridden(self) -> None:
+        result = self.run_launcher(settings={"ENABLE_VISION": "1",
+            "VISION_MAX_IMAGES": "2", "VISION_MAX_PIXELS": "262144"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertEqual(json.loads(argv[argv.index("--limit-mm-per-prompt") + 1]),
+                         {"image": 2, "video": 0})
+        self.assertEqual(json.loads(argv[argv.index("--mm-processor-kwargs") + 1])[
+            "max_pixels"], 262144)
 
     def test_invalid_vision_settings_fail_before_exec(self) -> None:
         for settings in ({"ENABLE_VISION": "yes"},
                          {"ENABLE_VISION": "1", "VISION_MAX_IMAGES": "0"},
+                         {"ENABLE_VISION": "1", "VISION_MAX_IMAGES": "x"},
                          {"ENABLE_VISION": "1", "VISION_MAX_PIXELS": "32768"},
+                         {"ENABLE_VISION": "1", "VISION_MAX_PIXELS": "16777217"},
+                         {"ENABLE_VISION": "1", "VISION_MAX_PIXELS": "1.5"},
                          {"ENABLE_VISION": "1", "VISION_MAX_PIXELS": "-1"}):
             with self.subTest(settings=settings):
                 result = self.run_launcher(settings=settings)
@@ -259,6 +278,7 @@ class ServeFlagsTests(unittest.TestCase):
         self.assertFalse(
             any(value.startswith("PYTORCH_CUDA_ALLOC_CONF=") for value in argv)
         )
+        self.assertFalse(any(value.startswith("ENABLE_VISION=") for value in argv))
 
     def test_docker_launcher_forwards_two_client_capacity_settings(self) -> None:
         settings = {
@@ -281,7 +301,8 @@ class ServeFlagsTests(unittest.TestCase):
         launcher_env = self.captured()["env"]
         compose = (ROOT / "docker/compose.yaml").read_text()
         for name in ("DISABLE_CUSTOM_ALL_REDUCE", "PYTORCH_CUDA_ALLOC_CONF",
-                     "VLLM_WNA16_STATIC_HOT_CACHE_SIZE"):
+                     "VLLM_WNA16_STATIC_HOT_CACHE_SIZE", "ENABLE_VISION",
+                     "VISION_MAX_IMAGES", "VISION_MAX_PIXELS"):
             match = re.search(
                 rf'^\s+{name}:\s+"\$\{{{name}:-([^}}]+)\}}"\s*$',
                 compose,

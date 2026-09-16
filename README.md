@@ -132,6 +132,8 @@ make serve
 
 The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
 
+Image inputs are optional. See the [vision profile and request example](docs/vision.md).
+
 The default now caches 84 experts per layer to leave more room for prefill.
 Context stays at 256K and precision is unchanged. The results above are historical;
 they are not new hot84 measurements. Set `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`

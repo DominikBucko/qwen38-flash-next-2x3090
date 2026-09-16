@@ -681,6 +681,36 @@ Verify the explicit KV byte allocation and `MAX_NUM_SEQS=1`. Then inspect hot
 cache capacity, batched-token budget, and transient allocations. Do not reduce
 `MAX_MODEL_LEN` and still call the result a full-context profile.
 
+### Image inputs are rejected
+
+The original launcher hard-coded `--language-model-only`; the resulting
+`At most 0 image(s)` error did not mean the checkpoint lacked vision weights.
+The published target contains 333 `model.visual.*` BF16 tensors, 897,862,112
+payload bytes, in `model-00015-of-00017.safetensors`. Its AutoRound metadata
+explicitly excludes `.*visual.*` from INT4 quantization. Do not fetch a second
+vision checkpoint or requantize these tensors to enable images.
+
+The opt-in launcher uses `ENABLE_VISION=1`, one image, no video, a 1,048,576-pixel
+processor cap, and `--mm-encoder-tp-mode weights`. Use the hot80 profile in
+`configs/vision.env` to leave room for the BF16 GPU tower and encoder working
+memory. Text-only defaults remain hot84. This is not a CPU encoder feature:
+moving preprocessing to CPU would not move the tower. The existing model class
+already instantiates Qwen3_VisionTransformer when language-model-only is false,
+and this checkpoint has no deepstack visual injection levels. No runtime
+overlay changes or new model files were needed for the tested image path.
+
+The first checks used three neutral prompts asking for printed codes and left/
+right colors from synthetic PNGs. Expected answers were present only in pixels,
+not in the text prompt. Both 768x512 cases and the 1536x1024 downscaling case
+passed. A two-image request returned HTTP 400, and image requests advanced both
+MTP draft and accepted-token counters. These are bounded grounding checks, not
+a broad vision quality benchmark. With the encoder loaded, all three subsequent
+text checks passed: 262,016+128, 1,024+128, and 128+1,024. The shared KV capacity
+remained 276,313 tokens, with no inference allocation retries or preemptions.
+The full-context check was text-only, after the image probes; it was not a cold
+request or a full-context multimodal check. See `docs/vision.md` for setup and
+`benchmarks/2026-09-16/vision.json` for evidence and limits.
+
 ### Prefix caching reports hits but output changes
 
 Suspect hybrid state. Inspect Mamba-aligned splitting, QSA compressor state,
