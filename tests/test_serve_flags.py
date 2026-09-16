@@ -194,6 +194,21 @@ class ServeFlagsTests(unittest.TestCase):
             any(value.startswith("PYTORCH_CUDA_ALLOC_CONF=") for value in argv)
         )
 
+    def test_docker_launcher_forwards_two_client_capacity_settings(self) -> None:
+        settings = {
+            "MAX_NUM_SEQS": "2",
+            "MAX_MODEL_LEN": "131072",
+            "MAX_NUM_BATCHED_TOKENS": "2048",
+            "KV_CACHE_MEMORY_BYTES": "4697620480",
+            "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "80",
+            "MTP_DEPTH": "3",
+        }
+        result = self.run_docker_launcher(settings)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        for name, value in settings.items():
+            self.assertIn(f"{name}={value}", argv)
+
     def test_compose_safety_defaults_match_effective_launcher_defaults(self) -> None:
         result = self.run_launcher()
         self.assertEqual(result.returncode, 0, result.stderr)
