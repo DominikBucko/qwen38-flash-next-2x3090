@@ -1,4 +1,4 @@
-# Qwen3.8 Flash Next on dual RTX 3090 and RTX 4090: hardware guide
+# Qwen3.8 Flash Next on dual RTX 3090, RTX 4090, and RTX 5090: hardware guide
 
 ## Tested hardware contract
 
@@ -147,6 +147,81 @@ checkpoint and image, run the full preflight, and treat the result as new
 hardware evidence. A successful short prompt is not enough to claim 262K
 support; the boundary test is 262,016 input tokens plus 128 output tokens.
 
+## Community report: dual RTX 5090
+
+A contributor ran the checkpoint on two RTX 5090s and reported **105.7 tok/s
+for narrative and 114.3 tok/s for code**. The setup and measurements below come
+from [hardware report #7](https://github.com/DominikBucko/qwen38-flash-next-2x3090/issues/7).
+We have not reproduced them on 5090s.
+
+| Component | Reported configuration |
+|---|---|
+| GPUs | 2× RTX 5090, 32 GB each; compute capability 12.0 |
+| CPU | Threadripper PRO 3975WX, 32 cores / 64 threads, one NUMA node |
+| RAM | 251 GiB visible; no active swapping during serving |
+| PCIe | Gen 4 ×16 on both cards, PHB topology, no NVLink |
+| OS / driver | Ubuntu 24.04.4 LTS / NVIDIA 610.57.04 |
+
+The contributor built the normal Docker overlay from repository commit
+[`ceaa9fa`](https://github.com/DominikBucko/qwen38-flash-next-2x3090/tree/ceaa9fae4f02669bdb9ca81953e797529b451b75).
+The pinned base image worked without an extra rebuild for compute capability
+12.0. The run used the published checkpoint at revision
+`ef554143369a706525336f6b42a09094835dc077`, TP2/EP2, Humming, UVA expert
+offload, approximate QSA, and compact INT4 MTP3.
+
+### Settings and results
+
+The only override at that commit was `CPU_OFFLOAD_GB=22`, down from 30.
+The key effective settings were:
+
+```dotenv
+CPU_OFFLOAD_GB=22
+VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88
+MAX_MODEL_LEN=262144
+MAX_NUM_SEQS=1
+MAX_NUM_BATCHED_TOKENS=4096
+KV_CACHE_MEMORY_BYTES=4429185024
+MTP_DEPTH=3
+DISABLE_CUSTOM_ALL_REDUCE=1
+```
+
+This report predates the change to hot84. The current 3090 profile still uses
+hot84 and `CPU_OFFLOAD_GB=30`; the 5090 settings above are not new defaults for
+3090s or 128 GB RAM hosts.
+
+| Natural-prompt measurement | Reported result |
+|---|---:|
+| Narrative decode | 105.7 tok/s |
+| Code decode | 114.3 tok/s |
+| Short-chat time to first token | 357 ms |
+
+These are medians of five streaming runs after three warmups, with one request
+at a time. Sampling used temperature 0.6, top-p 0.95, top-k 20, and min-p 0.
+Decode excluded time to first token. The report does not give token counts for
+these natural prompts, so these are **not established 256K decode rates** or a
+matched comparison with our 3090 benchmarks.
+
+The server was configured for 262,144 total tokens. The listed near-full test
+used 257,625 input + 4,096 output = 261,721 tokens, with `CPU_OFFLOAD_GB=30`.
+That is close to the limit, but not an exact boundary test. Its repeated filler
+also gave near-perfect MTP acceptance, so we do not use its decode rate as a
+representative result.
+
+### What helped on that host
+
+- Reducing `CPU_OFFLOAD_GB` from 30 to 22 improved reported natural-prompt
+  decode by 12–17% and prefill by 25%. The report does not give an absolute
+  natural-prompt prefill rate.
+- MTP3 beat MTP2; reducing draft depth cost 4.5% on narrative decode.
+- Raising the prefill batch from 4,096 to 8,192 did not help. Raising the hot
+  cache above 88 caused an OOM during KV allocation.
+
+Peak VRAM was 29.3 and 30.4 GiB. More VRAM did not remove the need to budget
+for the hot cache, KV cache, and working memory. Start with the pinned runtime,
+check [memory use](memory.md), and measure each change on your own workload.
+The report does not establish how much of the gain depends on its larger RAM
+capacity, and it does not test image inputs or concurrent requests.
+
 ## Host and container responsibilities
 
 The host supplies Linux x86_64, the NVIDIA driver, Docker, the NVIDIA Container
@@ -167,10 +242,11 @@ version. Keep the pinned image boundary intact when reproducing results.
 
 ## Text-only serving is the default
 
-The launcher passes `--language-model-only`. The published configuration and
-benchmarks cover text requests through the OpenAI-compatible endpoint. They do
-not validate image, audio, or video inputs, even if upstream model or vLLM code
-contains multimodal interfaces.
+By default, the launcher passes `--language-model-only`. The throughput
+benchmarks in this guide cover text requests through the OpenAI-compatible
+endpoint. An [opt-in image profile](vision.md) has passed basic image and
+text-context capacity checks on two 3090s. It has not been tested on 5090s.
+Audio and video inputs are not validated.
 
 ## Setup FAQ
 
@@ -220,7 +296,7 @@ capacity you need. The exact order and tradeoffs are in
 
 Use the [hardware report form](https://github.com/DominikBucko/qwen38-flash-next-2x3090/issues/new?template=hardware-report.yml)
 to share your setup, exact workload, settings, measurements, and failures.
-Independent 3090 runs and exploratory 4090 results help improve this guide.
+Independent 3090 runs and further 4090 or 5090 results help improve this guide.
 
 ## Related documentation
 
