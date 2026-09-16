@@ -56,6 +56,7 @@ class ServeFlagsTests(unittest.TestCase):
             "        'DISABLE_CUSTOM_ALL_REDUCE': os.environ.get('DISABLE_CUSTOM_ALL_REDUCE'),\n"
             "        'PYTORCH_CUDA_ALLOC_CONF': os.environ.get('PYTORCH_CUDA_ALLOC_CONF'),\n"
             "        'VLLM_PLE_CPU_OFFLOAD': os.environ.get('VLLM_PLE_CPU_OFFLOAD'),\n"
+            "        'VLLM_WNA16_STATIC_HOT_CACHE_SIZE': os.environ.get('VLLM_WNA16_STATIC_HOT_CACHE_SIZE'),\n"
             "        'VLLM_WNA16_STATIC_HOT_CACHE_FILE': os.environ.get('VLLM_WNA16_STATIC_HOT_CACHE_FILE'),\n"
             "    }}, target)\n"
         )
@@ -70,17 +71,21 @@ class ServeFlagsTests(unittest.TestCase):
         fake_docker.chmod(0o755)
 
     def run_launcher(
-        self, value: str | None = None, allocator: str | None = None
+        self, value: str | None = None, allocator: str | None = None,
+        hot_cache: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env["PATH"] = f"{self.bin_dir}{os.pathsep}{env['PATH']}"
         env["CAPTURE_PATH"] = str(self.capture)
         env.pop("DISABLE_CUSTOM_ALL_REDUCE", None)
         env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
+        env.pop("VLLM_WNA16_STATIC_HOT_CACHE_SIZE", None)
         if value is not None:
             env["DISABLE_CUSTOM_ALL_REDUCE"] = value
         if allocator is not None:
             env["PYTORCH_CUDA_ALLOC_CONF"] = allocator
+        if hot_cache is not None:
+            env["VLLM_WNA16_STATIC_HOT_CACHE_SIZE"] = hot_cache
         return subprocess.run(
             [str(self.launcher), str(self.model)],
             env=env,
@@ -132,6 +137,24 @@ class ServeFlagsTests(unittest.TestCase):
         self.assertNotIn("--disable-custom-all-reduce", captured["argv"])
         self.assertEqual(captured["env"]["DISABLE_CUSTOM_ALL_REDUCE"], "0")
         self.assertEqual(captured["env"]["PYTORCH_CUDA_ALLOC_CONF"], allocator)
+
+    def test_default_uses_hot84_without_reducing_context(self) -> None:
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        captured = self.captured()
+        self.assertEqual(captured["env"]["VLLM_WNA16_STATIC_HOT_CACHE_SIZE"], "84")
+        argv = captured["argv"]
+        for flag, value in (("--max-model-len", "262144"),
+                            ("--kv-cache-memory-bytes", "4429185024"),
+                            ("--max-num-batched-tokens", "4096")):
+            self.assertEqual(argv[argv.index(flag) + 1], value)
+        example = (ROOT / ".env.example").read_text()
+        self.assertIn("\nVLLM_WNA16_STATIC_HOT_CACHE_SIZE=84\n", example)
+
+    def test_hot88_remains_an_explicit_override(self) -> None:
+        result = self.run_launcher(hot_cache="88")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.captured()["env"]["VLLM_WNA16_STATIC_HOT_CACHE_SIZE"], "88")
 
     def test_custom_all_reduce_with_expandable_segments_fails_before_exec(self) -> None:
         result = self.run_launcher(
@@ -214,7 +237,8 @@ class ServeFlagsTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         launcher_env = self.captured()["env"]
         compose = (ROOT / "docker/compose.yaml").read_text()
-        for name in ("DISABLE_CUSTOM_ALL_REDUCE", "PYTORCH_CUDA_ALLOC_CONF"):
+        for name in ("DISABLE_CUSTOM_ALL_REDUCE", "PYTORCH_CUDA_ALLOC_CONF",
+                     "VLLM_WNA16_STATIC_HOT_CACHE_SIZE"):
             match = re.search(
                 rf'^\s+{name}:\s+"\$\{{{name}:-([^}}]+)\}}"\s*$',
                 compose,

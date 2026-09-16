@@ -113,6 +113,11 @@ export MODEL_DIR=/models/qwen38-upload
 docker compose -f docker/compose.yaml up --build
 ```
 
+The single-request default is hot84 with the full 262,144-token limit. Existing
+`.env` files override it: change `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` to `84` when
+upgrading. Hot88 remains an optional tighter profile; test long prefill before
+using it. Neither setting removes experts or changes their precision.
+
 The approximate QSA selector is default. To opt into exact selection:
 
 ```bash

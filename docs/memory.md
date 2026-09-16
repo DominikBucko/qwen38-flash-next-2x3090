@@ -45,12 +45,12 @@ swap traffic is. Watch `vmstat 1` while generating: persistent nonzero `si` or
 
 ## GPU memory
 
-The released 256K profile is deliberately tight. Its main adjustable users of
-VRAM are:
+The default 256K profile uses hot84. Hot88 is an optional, tighter profile.
+The main adjustable users of VRAM are:
 
 | Setting | Released value | Lower-memory value | Tradeoff |
 |---|---:|---:|---|
-| `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` | 88 | 86, then 84 | Saves about 116 MiB per removed slot on each GPU; more expert misses reduce decode speed. |
+| `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` | 84 | 80 | Saves about 116 MiB per removed slot on each GPU; more expert misses can reduce decode speed. |
 | `KV_CACHE_MEMORY_BYTES` | 4,429,185,024 | 4,294,967,296 | Saves 128 MiB per GPU; verify that reported KV capacity remains at least 262,144 tokens. |
 | `MAX_NUM_BATCHED_TOKENS` | 4,096 | 2,048 | Reduces prefill temporary tensors; lowers prefill throughput. |
 
@@ -61,8 +61,10 @@ at once. This changes temporary storage, not weight precision, attention top-k,
 or the number of visible keys. It does not remove the memory needed by other
 prefill operations, so hot88 can still be too tight on some hosts.
 
-If hot88 OOMs, use `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84` first. This frees about
-464 MiB of expert storage per GPU without reducing context or model precision.
+Hot84 frees about
+464 MiB of expert storage per GPU compared with hot88, without reducing context
+or model precision. Existing `.env` files must be updated explicitly; rebuilding
+does not override a value of `88` supplied by the user.
 Experts that are not cached on the GPU are still available from RAM. With the
 patched runtime, hot84 passed a 262,016-input + 128-output request as the first
 request after startup, then two shorter requests, with no inference-time

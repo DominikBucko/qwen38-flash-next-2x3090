@@ -132,14 +132,19 @@ make serve
 
 The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
 
+The default now caches 84 experts per layer to leave more room for prefill.
+Context stays at 256K and precision is unchanged. The results above are historical;
+they are not new hot84 measurements. Set `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`
+in `.env` to try the tighter profile. Existing `.env` files keep their old value.
+
 ### If it runs out of memory
 
-The checked-in profile is close to the VRAM limit. Check `free -h`,
+Even hot84 can be tight with other GPU users. Check `free -h`,
 `swapon --show`, and `nvidia-smi` first. Then make one change at a time:
 
-1. Lower `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` from `88` to `86`, then `84` if
-   needed. Each removed slot saves roughly 116 MiB per GPU across the 48
-   layers, at the cost of more expert traffic from system memory.
+1. Check that `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84`; an older `.env` may still
+   select `88`. If needed, try `80`. Each removed slot saves roughly 116 MiB
+   per GPU across the 48 layers, at the cost of more expert traffic from system memory.
 2. Lower `KV_CACHE_MEMORY_BYTES` from `4429185024` to `4294967296`. Keep this
    only if the startup log still reports at least 262,144 KV-cache tokens.
 3. Lower `MAX_NUM_BATCHED_TOKENS` from `4096` to `2048`. This reduces peak

@@ -37,8 +37,8 @@ release and hillclimb shapes:
 The long per-run rates were 74.030749, 76.707158, and 76.224624 tok/s;
 TTFT was 215.128, 211.059, and 211.228 seconds. The short run range was
 74.7459–79.7072 tok/s. The candidate used hot-cache 84, bidirectional CUDA P2P,
-custom all-reduce enabled, and expandable segments disabled. The default
-88/disabled/True profile remains unchanged.
+custom all-reduce enabled, and expandable segments disabled. The current default
+is 84/disabled/True. The September 5 candidate remains a different profile.
 
 Historical benchmark shapes:
 
@@ -166,7 +166,7 @@ The final layout is intentionally asymmetric:
 - dense layers, attention work, shared experts, and hot routed experts run on
   the GPUs;
 - the complete routed-expert pool remains addressable in pinned system memory;
-- an 88-expert-per-layer GPU cache is the full-context default;
+- an 84-expert-per-layer GPU cache is the full-context default;
 - the dynamic LRU changes which experts occupy those slots as the sequence
   evolves;
 - the FP8 PLE table belongs to a dedicated CPU process;
@@ -202,7 +202,7 @@ MAX_NUM_BATCHED_TOKENS=4096
 MAX_PARALLEL_LOADING_WORKERS=1
 KV_CACHE_MEMORY_BYTES=4429185024
 CPU_OFFLOAD_GB=30
-VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88
+VLLM_WNA16_STATIC_HOT_CACHE_SIZE=84
 VLLM_WNA16_STATIC_HOT_CACHE_MAX_TOKENS=16
 VLLM_PREFIX_CACHE_RETENTION_INTERVAL=1600
 VLLM_PLE_OFFLOAD_READY_TIMEOUT=1200
@@ -219,8 +219,8 @@ DISABLE_CUSTOM_ALL_REDUCE=0
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False
 ```
 
-They are an experimental measured profile, not a change to the checked-in
-defaults above. The PHB host exposed CUDA P2P in both directions. The candidate
+The collective and allocator remain experimental overrides; the current default
+also uses hot84 for prefill headroom. The PHB host exposed CUDA P2P in both directions. The candidate
 completed three exact-count 258,048-input/4,096-output chat streams. Four
 recoverable allocator warnings appeared during the first long prefill, with no
 stream failures.
@@ -304,9 +304,9 @@ semantics while physical pages lived in different memory tiers. This removed
 extra dispatch paths and allowed Marlin, Triton, and Humming comparisons on the
 same placement scheme.
 
-The best short-context capacity was not the full-context default. The released
-profile uses 88 slots to leave enough VRAM for the 256K KV state and other
-buffers.
+The best short-context capacity was not the full-context default. The historical
+release used 88 slots. The current default uses 84 for more prefill headroom;
+do not relabel historical results as hot84 measurements.
 
 ### 7. Fused QSA: 59.97 tok/s, +2.60
 
@@ -640,8 +640,8 @@ and 262,144 total context. Hot88 completed the same staircase as the control;
 full-context TTFT was 217.59 vs 217.22 seconds, with inference allocation retries
 reduced from 20 to 4. Hot84 completed 262,016+128 as its first user request, then
 1,024+128 and 128+1,024, with zero inference retries. Both had two recoverable
-load-time retries. Recommend hot84 as the tested fallback, not a smaller KV
-pool or lower precision. No universal driver/display-memory guarantee follows
+load-time retries. Keep hot84 as the default instead of reducing the KV pool
+or precision. No universal driver/display-memory guarantee follows
 from one native host. The short 32/128-output timings have SSE buffering
 artifacts and must not become new decode claims.
 
@@ -696,7 +696,7 @@ These are experiments, not promised wins:
 
 1. Relearn hot-expert rankings from a broader workload, then compare static
    initialization plus LRU against a cold LRU.
-2. Sweep cache capacity around the released 88-slot full-context point. Measure
+2. Sweep cache capacity around the 84-slot full-context default. Measure
    VRAM headroom, miss rate, short decode, and post-256K decode together.
 3. Test MTP depth and scheduling with acceptance-aware reporting. More draft
    tokens can lose when verification or rollback cost grows.
