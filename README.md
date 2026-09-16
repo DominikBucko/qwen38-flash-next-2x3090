@@ -27,6 +27,9 @@ These are single-request measurements. Prefill and decode use different test
 shapes; 1,402 and 135.2 tok/s did not come from the same request. The chart marks
 the switch from a 256-token decode test to a 4,096-token test with a dotted line.
 
+The benchmark machine has 8×16 GB DDR4-3200, with all eight memory channels
+populated. See the [hardware details](docs/hardware.md#september-5-benchmark-host).
+
 ![Qwen3.8-Flash-Next performance hillclimb](docs/images/hillclimb.svg)
 
 ## Speed hillclimb
