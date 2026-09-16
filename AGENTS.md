@@ -230,6 +230,11 @@ its large table separately, and the expert tier has additional storage and
 metadata. Likewise, the 16-token hot-cache threshold keeps the LRU fast path on
 small decode-shaped batches instead of making a long prefill churn expert slots.
 
+The pinned runtime logs that `max_parallel_loading_workers` is unsupported and
+ignored. The retained value of 1 is not a loading-memory bound. Fresh Docker
+validation exposed the same warning; do not credit this flag with serializing
+rank loads or avoiding host OOM.
+
 Important launch choices:
 
 - TP2 and EP2 split one request across both cards.
@@ -653,6 +658,18 @@ request. Short aggregates were 78.92/76.06/75.81 tok/s; full-context decode was
 `benchmarks/2026-09-16/long-decode.json` and `qsa-memory.md` in the same directory.
 Do not replace historical headline results or extend their graph with these
 unmatched workloads. The long-context rate is a single request per profile.
+
+The September 16 fresh Docker replay built the public Dockerfile from an empty
+image cache, mounted only the checkpoint read-only, and used the public launcher.
+All 29 installed overlay hashes and 32 GPU-free tests passed in the image;
+CUDA peer access and tensor-copy equality passed in both directions. The
+two-client profile completed both 129,024+2,048 requests, with 97.1% peak KV use,
+zero preemptions, and 81.89 tok/s during overlapping decode. Hot84 defaults
+passed 262,016+128 as the first request, then two short checks. Both launches
+had two loading retries and zero inference retries. Record first-use JIT and
+host paging; do not label these warmed speed or fully RAM-resident measurements.
+`benchmarks/2026-09-16/docker-validation.json` contains the image digest,
+installed versions, exact settings, and caveats. Historical claims are unchanged.
 
 PLE residency was not complete: the worker retained roughly 35 GiB in swap
 after loading, with 29 GiB reported available RAM. Decode-only samples read

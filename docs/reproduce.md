@@ -23,9 +23,10 @@ container receives `SYS_PTRACE` for cross-process PLE CUDA IPC. On hosts where
 that is insufficient, `kernel.yama.ptrace_scope=0` may be required temporarily;
 do not make that security relaxation persistent without reviewing it.
 
-The launcher passes `--max-parallel-loading-workers 1` to limit checkpoint
-staging pressure. This does not remove the need for swap: the target, PLE
-worker, pinned expert storage, and conversion buffers overlap during startup.
+The launcher passes `--max-parallel-loading-workers 1`, but the pinned vLLM
+runtime warns that it ignores this option. Do not rely on it to limit loading
+memory. The target, PLE worker, pinned expert storage, and conversion buffers
+overlap during startup, so swap is still needed.
 
 ## 2. Immutable inputs
 
@@ -135,3 +136,9 @@ GitHub CI checks Python syntax, overlay checksums, lock/Docker consistency,
 accidental model blobs, symlinks, cache files, and common token formats. It
 cannot validate CUDA kernels, 256K allocation, or throughput. Those checks need
 the target hardware and the procedure in [`benchmarks.md`](benchmarks.md).
+
+The September 16 fresh Docker check passed both the two-client 128K profile and
+a full-256K request as the first inference on hot84 defaults. It also verified
+all installed overlay hashes and bidirectional P2P copies inside the image.
+See the [test record](../benchmarks/2026-09-16/docker-validation.json) for exact
+versions and limits. This does not replace testing on a different host.

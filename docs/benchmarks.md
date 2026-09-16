@@ -1,5 +1,31 @@
 # Benchmark evidence
 
+## September 16 fresh Docker validation
+
+The public Dockerfile was built from an empty Docker image cache and started
+with the public launcher, a read-only checkpoint mount, and no native runtime
+mounts. All 29 installed overlay hashes matched. CUDA peer access and tensor
+copies passed in both directions, and all 32 GPU-free regression tests passed
+inside the image.
+
+The two-client profile completed two distinct 129,024-input + 2,048-output
+requests together, using 97.1% of its 263,416-token KV pool with no preemptions
+or inference allocation retries. Aggregate decode during the shared generation
+interval was 81.9 tok/s; a short 1,024-input + 2,048-output pair measured 93.0
+tok/s. All four sequential/concurrent isolation checks passed.
+
+A separate fresh server used the new hot84 defaults without capacity overrides.
+Its first request completed 262,016 input + 128 output tokens, followed by
+1,024+128 and 128+1,024 checks. All counts matched, with zero inference
+allocation retries. Full-context TTFT was 229.85 seconds, including first-use
+kernel compilation. The KV pool held 276,313 tokens; BF16 KV and MTP3 stayed on.
+
+These are one-off capacity checks, not a replacement for historical peak
+benchmarks. One client's decode overlaps the other client's prefill; summing
+their whole-request rates would misstate concurrent decode speed. The host used
+swap, with page-ins observed. Settings, versions, request shapes, timings, and
+limits are in the [validation record](../benchmarks/2026-09-16/docker-validation.json).
+
 ## September 5 verified public measurements
 
 The public [`benchmarks/2026-09-05`](../benchmarks/2026-09-05/README.md)

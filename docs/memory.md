@@ -33,11 +33,10 @@ the file works. Do not run these commands over an existing file. Btrfs, ZFS,
 encrypted-root, and network-backed filesystems can require different swapfile
 setup; follow the filesystem's own documentation.
 
-The profile loads tensor-parallel ranks with
-`--max-parallel-loading-workers 1`, but the target loader and PLE worker still
-overlap. A machine can therefore run out of host memory before the server is
-ready. Slow progress through the 25 checkpoint shards is normal when the host
-is under memory pressure.
+The profile passes `--max-parallel-loading-workers 1`, but the pinned runtime
+ignores that option. The target loader and PLE worker overlap, so a machine can
+run out of host memory before the server is ready. Slow progress through the
+25 checkpoint shards is normal when the host is under memory pressure.
 
 Configured or allocated swap is not automatically a serving failure. Continuous
 swap traffic is. Watch `vmstat 1` while generating: persistent nonzero `si` or
@@ -74,6 +73,11 @@ These are native-runtime checks on one host, not a guarantee for every driver
 or display setup. The [validation record](../benchmarks/2026-09-16/qsa-memory.json)
 contains the settings and limits.
 
+The fresh Docker repeat also passed the same cold-256K-first sequence on hot84,
+with zero inference allocation retries and the full 276,313-token KV pool.
+No hot-cache or capacity overrides were supplied to that launch. See the
+[Docker record](../benchmarks/2026-09-16/docker-validation.json).
+
 The longer 4,096-output-token comparison measured 78.92 / 76.06 / 75.81 tok/s
 at short context for hot88 / hot86 / hot84. Near-full-context decode was
 77.50 / 77.67 / 77.59 tok/s. Hot84 had no inference allocation retries; hot88
@@ -87,8 +91,8 @@ the model's quality contract.
 Use the failure location to choose the pool:
 
 - If the process is killed while loading shards and the kernel log contains an
-  out-of-memory kill, add host swap and keep
-  `MAX_PARALLEL_LOADING_WORKERS=1`.
+  out-of-memory kill, add host swap. Changing `MAX_PARALLEL_LOADING_WORKERS`
+  will not help with this pinned runtime.
 - If vLLM reports `torch.OutOfMemoryError` on a GPU during startup or the first
   prompt, reduce the hot cache first, then the explicit KV allocation.
 - If the server runs but `vmstat 1` shows sustained swap-in/swap-out during
@@ -155,6 +159,12 @@ requests were resident together; peak KV use was 97.1%, with zero preemptions.
 Small sequential and concurrent JSON/secret-isolation checks also passed.
 This was one native-runtime test, not a fresh Docker deployment or a broad
 quality evaluation. Rebuild and check capacity on your own host.
+
+A fresh Docker build also passed the same full-context pair: 97.1% peak KV use,
+zero preemptions, and no inference allocation retries. Overlapping decode was
+81.9 tok/s aggregate; the short 1,024-input + 2,048-output pair reached 93.0
+tok/s aggregate. Those are single capacity checks, not repeat-averaged speed
+claims. See the [Docker validation record](../benchmarks/2026-09-16/docker-validation.json).
 
 A 4 GiB pool (`4294967296`) reported only 240,510 tokens with two sequences in
 our pinned runtime. It cannot keep two full 131,072-token windows resident at
