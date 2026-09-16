@@ -1,0 +1,101 @@
+{
+  "purpose": "Opt-in image grounding and text-capacity checks; not a vision-quality or throughput benchmark",
+  "date": "2026-09-16",
+  "hardware": {"gpus": "2x RTX 3090 24 GB", "ram": "128 GB"},
+  "runtime": {
+    "build_source_commit": "cc99a1e461cd48cf92a3c95963db914c10aed9c2",
+    "local_image_index_digest": "sha256:dce5567b5148e9e74ab3a98b36ac7dde6b935f8bbe6e4f3b28905d722abb1725",
+    "local_image_amd64_manifest_digest": "sha256:fa72c3ed4a7c08f1f0a13421724422d439a0b38ec859a2a170dc079846644cd0",
+    "base_image_digest": "sha256:fc120ece0a388cc0aa1caad4a9f1cd92113484ab7ec2fd0efadd62585be05bf8",
+    "checkpoint_revision": "ef554143369a706525336f6b42a09094835dc077",
+    "vllm": "0.1.dev20073+g8e685d198",
+    "deployment": "Public Dockerfile and launcher; cached base/runtime layers from docker-validation.json; no native runtime mounts",
+    "overlay_changes_for_vision": 0,
+    "vision_tensors": 333,
+    "vision_payload_bytes": 897862112,
+    "vision_dtype": "bfloat16; unchanged checkpoint tensors; AutoRound metadata excludes visual weights from INT4",
+    "vision_device": "GPU, mm_encoder_tp_mode=weights",
+    "vision_attention_backend": "FLASH_ATTN",
+    "kv_dtype": "bfloat16",
+    "qsa": "approximate, unchanged",
+    "gpu_free_regression_tests_passed_locally": 37,
+    "swap": "8 GiB original plus 56 GiB temporary; temporary file removed after server shutdown"
+  },
+  "settings": {
+    "ENABLE_VISION": 1,
+    "VISION_MAX_IMAGES": 1,
+    "VISION_MAX_PIXELS": 1048576,
+    "min_pixels": 65536,
+    "video_limit": 0,
+    "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": 80,
+    "MAX_NUM_SEQS": 1,
+    "MAX_MODEL_LEN": 262144,
+    "MAX_NUM_BATCHED_TOKENS": 4096,
+    "KV_CACHE_MEMORY_BYTES": 4429185024,
+    "MTP_DEPTH": 3
+  },
+  "startup_seconds": 497.787611230,
+  "gpu_kv_tokens": 276313,
+  "image_checks": {
+    "protocol": "OpenAI chat image_url data URLs; temperature 0; thinking disabled; max_tokens 512; sequential requests",
+    "prompt": "Read the code printed at the top and identify the colors of the left circle and right square. Return only a JSON object with string keys code, left_color, right_color. Use lowercase color names. Do not add markdown.",
+    "fixtures": "White PNG canvas; black printed code; colored left circle and right square. Expected codes/colors were not included in the text prompt.",
+    "cases": [
+      {
+        "image_size": [768, 512],
+        "expected_and_observed": {"code": "ORBIT 7319", "left_color": "red", "right_color": "blue"},
+        "passed": true,
+        "prompt_tokens": 443,
+        "completion_tokens": 36,
+        "end_to_end_seconds": 5.246044033
+      },
+      {
+        "image_size": [768, 512],
+        "expected_and_observed": {"code": "MAPLE 2846", "left_color": "green", "right_color": "orange"},
+        "passed": true,
+        "prompt_tokens": 443,
+        "completion_tokens": 36,
+        "end_to_end_seconds": 2.373579712
+      },
+      {
+        "image_size": [1536, 1024],
+        "expected_and_observed": {"code": "CEDAR 9052", "left_color": "yellow", "right_color": "purple"},
+        "passed": true,
+        "prompt_tokens": 1073,
+        "completion_tokens": 27,
+        "end_to_end_seconds": 4.014997206
+      }
+    ],
+    "two_image_limit_check": {"http_status": 400, "message": "At most 1 image(s) may be provided in one prompt. (parameter=image)"},
+    "mtp_counter_deltas": {"drafted_tokens": 75, "accepted_tokens": 75},
+    "timing_note": "Whole non-streaming request time, including preprocessing and generation; first-use JIT occurred. Not isolated encoder or decode timings."
+  },
+  "text_checks_with_encoder_loaded": {
+    "request_recipe": "repo-chat; unique cache salt; forced-length output",
+    "probe_order": [[262016, 128], [1024, 128], [128, 1024]],
+    "warmup_policy": "The three image checks ran first; no explicit text warmup or repeated measurements",
+    "all_exact_counts_passed": true,
+    "ttft_seconds_in_probe_order": [228.653327816, 2.537515921, 1.930651691],
+    "post_first_chunk_tps_in_probe_order": [66.575505264, 78.549526414, 69.427299179],
+    "mtp_counter_deltas": {"drafted_tokens": 1509, "accepted_tokens": 774}
+  },
+  "preemptions": 0,
+  "allocation_retries_loading": 2,
+  "allocation_retries_inference": 0,
+  "peaks": {
+    "cpu_c": 81.875,
+    "gpu_c": [70, 74],
+    "gpu_w": [286.59, 291.89],
+    "gpu_mib": [23857, 23853],
+    "min_host_available_gib": 23.298637390,
+    "max_host_swap_used_gib": 53.819416046
+  },
+  "cleanup": "Server stopped normally; temporary swap removed; original swap retained",
+  "not_tested": [
+    "Broad vision quality or realistic screenshot benchmark suites",
+    "Full-context mixed image/text prompts",
+    "Multiple images per request, concurrent vision requests, or video",
+    "CPU encoder offload",
+    "Matched throughput comparison against text-only serving"
+  ]
+}

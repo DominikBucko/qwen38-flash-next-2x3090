@@ -6,6 +6,26 @@ profile=/opt/qwen38/configs/2x3090-128gb.env
 # shellcheck source=/dev/null
 source "$profile"
 
+case "$ENABLE_VISION" in
+  0) modality_args=(--language-model-only) ;;
+  1)
+    if ! [[ "$VISION_MAX_IMAGES" =~ ^[1-9][0-9]*$ && "$VISION_MAX_PIXELS" =~ ^[1-9][0-9]*$ ]]; then
+      echo "VISION_MAX_IMAGES and VISION_MAX_PIXELS must be positive decimal integers" >&2
+      exit 2
+    fi
+    if (( VISION_MAX_PIXELS < 65536 || VISION_MAX_PIXELS > 16777216 )); then
+      echo "VISION_MAX_PIXELS must be between 65536 and 16777216" >&2
+      exit 2
+    fi
+    modality_args=(
+      --limit-mm-per-prompt "{\"image\":$VISION_MAX_IMAGES,\"video\":0}"
+      --mm-processor-kwargs "{\"min_pixels\":65536,\"max_pixels\":$VISION_MAX_PIXELS}"
+      --mm-encoder-tp-mode weights
+    )
+    ;;
+  *) echo "ENABLE_VISION must be 0 or 1" >&2; exit 2 ;;
+esac
+
 case "$DISABLE_CUSTOM_ALL_REDUCE" in
   0) custom_all_reduce_arg= ;;
   1) custom_all_reduce_arg=--disable-custom-all-reduce ;;
@@ -64,7 +84,7 @@ exec vllm serve "$model" \
   --all2all-backend allgather_reducescatter \
   --moe-backend humming \
   --dtype bfloat16 \
-  --language-model-only \
+  "${modality_args[@]}" \
   --load-format safetensors \
   --safetensors-load-strategy lazy \
   --max-parallel-loading-workers "$MAX_PARALLEL_LOADING_WORKERS" \
