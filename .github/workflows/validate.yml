@@ -24,6 +24,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_ple_capture_hook.py' -v
           python -m unittest discover -s tests -p 'test_serve_flags.py' -v
           python -m unittest discover -s tests -p 'test_benchmark_serving.py' -v
+          python -m unittest discover -s tests -p 'test_prefill_progress.py' -v
       - name: Check Python syntax
         run: >-
           python -m compileall -q

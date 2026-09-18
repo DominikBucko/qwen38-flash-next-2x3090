@@ -1,5 +1,10 @@
 # Qwen3.8 Flash Next performance tuning on two 24 GB GPUs
 
+New experimental results: **139.8 seconds to first token and 86.2 tok/s decode
+at a full 256K window**. See the [September 18 curves and conditions](../benchmarks/2026-09-18/README.md).
+Those runtime changes are not in the default launcher yet; the setup below
+still describes the public profile.
+
 ## Start with the released profile
 
 Use [`configs/2x3090-128gb.env`](../configs/2x3090-128gb.env) and

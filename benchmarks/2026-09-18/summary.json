@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "publication_date": "2026-09-18",
+  "measurement_period": "2026-09-16 through 2026-09-18",
+  "status": "experimental_measurements_only_not_a_runtime_release",
+  "hardware": {"gpus": "2 x RTX 3090 24 GB", "system_memory_gib": 128},
+  "checkpoint": {
+    "repo": "albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE",
+    "canonical_tensor_revision": "ef554143369a706525336f6b42a09094835dc077"
+  },
+  "configuration": {
+    "tensor_parallel": 2, "expert_parallel": 2,
+    "hot_experts_per_rank": 84, "target": "Intel W4A16 group128 unchanged",
+    "draft": "INT4 group32", "mtp_depth": 3, "experts_per_token": 10,
+    "max_model_len": 262144, "max_num_seqs": 1, "batch_tokens": 4096,
+    "kv_bytes_per_rank": 4429185024, "kv_dtype": "BF16",
+    "ple_dtype": "FP8 E4M3FN", "qsa": "approximate, unchanged selection budget",
+    "retention_interval": 1600, "custom_all_reduce": false,
+    "expandable_segments": true
+  },
+  "protocol": {
+    "workload": "repo-chat, fixed source-code corpus without tiling",
+    "measured_requests_per_point": 1, "output_tokens": 2048,
+    "temperature": 0, "ignore_eos": true,
+    "prefix_isolation": "unique cache_salt per request; model, expert caches, graphs and host pages remain warm",
+    "warmup": "preceding history replays and startup work differ across screens",
+    "ttft_definition": "request start to first SSE event containing output token IDs",
+    "input_rate_definition": "input_tokens / ttft_seconds; includes scheduling and first-token work",
+    "decode_definition": "tokens after first output chunk / time until final output chunk",
+    "validity": "complete SSE, exact usage and output counts, length finish",
+    "confidence_interval": null,
+    "source_token_ids_sha256": "16281386e99360337eaf822c3bba9c2768a294cbbff916d06ee128955a272d1d",
+    "input_128k_sha256": "3a70931ba54a0968fac4a5e66336561efb61a1595a9035a03f21d8395622b3db",
+    "input_full_context_sha256": "d707d4c015f7b165e446be97f0b777b99af99d4996582f46ddf90db34812632a"
+  },
+  "long_context_series": [
+    {
+      "id": "before_tiered_prefill", "label": "Before tiered prefill",
+      "image_manifest_digest": "sha256:4782fadc1eb1b5fb0e0a720361cd806a8ecd13efe45c63a2b366532a50c26727",
+      "points": [
+        {"input_tokens": 131072, "output_tokens": 2048, "ttft_seconds": 103.97603485100262, "decode_tps": 79.08952964014004, "request_seconds": 129.85823486800655},
+        {"input_tokens": 260096, "output_tokens": 2048, "ttft_seconds": 214.48657644599734, "decode_tps": 74.9108579837831, "request_seconds": 241.81255078999675}
+      ]
+    },
+    {
+      "id": "tiered_and_warmup", "label": "Tiered prefill + warmup",
+      "image_manifest_digest": "sha256:fa13107d7551ba0d74bc0a0ed4f7b30695ee3323a23b233f8a0d088d83fb5c14",
+      "points": [
+        {"input_tokens": 131072, "output_tokens": 2048, "ttft_seconds": 74.04881497999304, "decode_tps": 85.2083348040743, "request_seconds": 98.07245605898788},
+        {"input_tokens": 260096, "output_tokens": 2048, "ttft_seconds": 146.36025471999892, "decode_tps": 81.08436051035324, "request_seconds": 171.60572340001818}
+      ]
+    },
+    {
+      "id": "latest_overlap", "label": "Latest: transfer overlap",
+      "image_manifest_digest": "sha256:34b5c77918a4c41359c36806c58b04c1d5f0d30196548bcef9524e38b0a9cfc5",
+      "points": [
+        {"input_tokens": 131072, "output_tokens": 2048, "ttft_seconds": 75.89864024199778, "decode_tps": 89.11333988231696, "request_seconds": 98.86955067300005},
+        {"input_tokens": 260096, "output_tokens": 2048, "ttft_seconds": 139.82098121501622, "decode_tps": 86.20597395778657, "request_seconds": 163.56661022201297}
+      ]
+    }
+  ],
+  "tiered_prefill_comparison": {
+    "input_tokens": 131072, "output_tokens": 2048,
+    "control_ttft_seconds": 100.74115848401561,
+    "candidate_ttft_seconds": 72.91037645499455,
+    "candidate_image_manifest_digest": "sha256:e2de377c601a0229731671d6539d0d3c2ba2442970275da622dd770eec455a56",
+    "limits": "Single screens. Same input and warmed history, but earlier synthetic and short-chat requests omitted from candidate."
+  },
+  "latest_history_replay": {
+    "scope": "frozen histories, not fresh task execution or quality evidence",
+    "completed_requests": 12, "warmed_requests": 6,
+    "input_token_range": [11843, 19902], "output_tokens_per_request": 1024,
+    "decode_tokens_excluding_first_chunks": 6138,
+    "decode_seconds": 71.97771425597603, "decode_tps": 85.2763951098987
+  },
+  "fresh_agent": {
+    "candidate_id": "tiered_and_warmup",
+    "scope": "one completed DBG-06 smoke, not a suite rerun or quality comparison",
+    "reasoning": "xhigh", "response_cap": 16384, "max_steps": 32, "temperature": 0,
+    "strict_pass": true, "score": 100, "requests": 13,
+    "prompt_tokens": 232591, "new_prefill_tokens": 58191,
+    "cached_tokens": 174400, "prefill_seconds": 39.37886516409344,
+    "new_prefill_tps": 1477.7216092316419, "decode_tps": 79.42999664197117,
+    "request_rows": [
+      {"request": 1, "prompt_tokens": 9255, "new_tokens": 9255, "prefill_seconds": 6.061126849992434},
+      {"request": 2, "prompt_tokens": 9385, "new_tokens": 4585, "prefill_seconds": 3.784530053992057},
+      {"request": 3, "prompt_tokens": 10214, "new_tokens": 3814, "prefill_seconds": 2.323349195998162},
+      {"request": 4, "prompt_tokens": 10767, "new_tokens": 4367, "prefill_seconds": 3.5063094630022533},
+      {"request": 5, "prompt_tokens": 11572, "new_tokens": 3572, "prefill_seconds": 2.047100418014452},
+      {"request": 6, "prompt_tokens": 11876, "new_tokens": 3876, "prefill_seconds": 3.1779702880012337},
+      {"request": 7, "prompt_tokens": 20881, "new_tokens": 3281, "prefill_seconds": 1.9154646980168764},
+      {"request": 8, "prompt_tokens": 22001, "new_tokens": 4401, "prefill_seconds": 3.129844998009503},
+      {"request": 9, "prompt_tokens": 22225, "new_tokens": 3025, "prefill_seconds": 1.8280164930038154},
+      {"request": 10, "prompt_tokens": 22473, "new_tokens": 3273, "prefill_seconds": 1.8885406160261482},
+      {"request": 11, "prompt_tokens": 25051, "new_tokens": 5851, "prefill_seconds": 3.814029452012619},
+      {"request": 12, "prompt_tokens": 26807, "new_tokens": 2807, "prefill_seconds": 1.9485431920038536},
+      {"request": 13, "prompt_tokens": 30084, "new_tokens": 6084, "prefill_seconds": 3.954039446020033}
+    ]
+  },
+  "provenance": {
+    "hashes_are_audit_identifiers_not_public_image_downloads": true,
+    "raw_sha256": {
+      "latest_128k": "fab94063787a4a515382bf7e8798e6c42ada009029746af89f4b6bd2a8ca2a2a",
+      "latest_full_context": "bf8acd2d30451975a751fcf42479a869c527a73dc786db9f12eee08bb55c00ac",
+      "latest_history_summary": "6aaf38824fdcf0805bac907a1a6982afb99fb5b9d7d1b694a3973d2de453c981",
+      "tiered_warmup_128k": "58fe58c4dd36c24be595eb1acdb51eb28c071cff20d85ce1bb24fe88fdd73d29",
+      "tiered_warmup_full_context": "9f2a56518c476bd9b9cd85394ce921ddb8fc87eba6cfc0719945625182e7d7df",
+      "fresh_agent_metrics": "0bdec401c077d5b02a1570cf6f860a13cd7cc0cce615dc49414759d09f06eafb",
+      "fresh_agent_summary": "e49a3ac85b76c4f5535dd99d412832692126ee0d0a81e7b1d1e6b0502ef86fe6"
+    }
+  },
+  "limits": [
+    "No default launcher, runtime overlay, checkpoint or precision change is released with this report.",
+    "Long-context series show single-screen progress, not a causal gain or confidence interval.",
+    "Latest overlap candidate has no matched OFF control; fresh-agent test was interrupted with zero completed trajectories.",
+    "Greedy output variation occurred in both controls and candidates. Quality parity is not established.",
+    "One successful agent task is not quality parity. At least three fresh trajectories per configuration are needed for quality conclusions.",
+    "Model startup and PLE prefault are excluded from request TTFT; host paging is not proven absent.",
+    "Private fixtures, hidden tests, traces, output text and workspaces are not published."
+  ]
+}

@@ -62,6 +62,49 @@ SHA-256 manifest for canonical tensor revision
 pinned vendor vLLM plus the public overlay using existing dependencies, not a
 fresh Docker build.
 
+## September 18 performance publication
+
+`benchmarks/2026-09-18/summary.json` and its README report experimental screens,
+not a runtime release. The public overlay, launch defaults, lock and canonical
+checkpoint tensors are unchanged. Do not infer that cloning main enables the
+new measurements. Experimental image digests are audit IDs, not pullable images.
+
+The latest candidate completed 131,072+2,048 in 75.899 s to first token at
+89.113 output tok/s, and 260,096+2,048 in 139.821 s at 86.206 output tok/s.
+Input/TTFT rates are 1,726.935 and 1,860.207 tok/s. They include scheduling and
+first-token work. The earlier full-context screen took 214.487 s: a 34.8%
+observed wait reduction, not an isolated causal gain. Preceding cache state
+differs and each point is one request. Preserve this qualification near claims.
+
+The most useful engineering change was the large-prefill expert view: hot GPU
+pages plus an immutable host suffix under one contiguous logical tensor. Keep
+small-query LRU behavior separate. The earlier 128K screen went from 100.741 to
+72.910 s, but preceding synthetic/short-chat warmups differed. Later startup
+warmup covered actual ten-expert routing shapes; three-query QSA reused a
+four-row padded specialization. A boundary tail pause shrank from 4.286 to
+0.121 s, but that pair had worse total request time. Do not call the warmup
+free: startup and host prefault costs are outside request timing.
+
+The latest experiment overlaps down-weight staging with gate/up compute for a
+bounded four-query path. Changing-route integration checked 140 cases per GPU
+in batch-invariant diagnostic mode. It does not validate distributed or full
+model quality. There is no matched overlap-OFF full-model result. The candidate
+fresh-agent run was stopped before completion; do not invent a score for it.
+
+The completed fresh-agent smoke belongs to the preceding tiered+warmup image:
+13 requests, 58,191 new tokens / 39.379 s = 1,477.722 new-prefill tok/s, 79.430
+decode tok/s, 174,400/232,591 cached prompt tokens (74.98%). One DBG-06 task
+passed, not the full suite. Frozen-history replay reached 85.276 tok/s on the
+latest candidate; it is latency evidence only. Greedy output varied in controls
+and candidates. Quality parity and adoption require further matched tests and
+at least three fresh trajectories per configuration.
+
+Regenerate the two new SVGs with `python3 scripts/render_prefill_progress.py`.
+The generator reads the published JSON. Keep original historical hillclimb
+shapes intact; do not join the 135 tok/s repetitive-prompt peak to these agent
+or long-context points as one matched series. Public reports must omit private
+fixtures, traces, workstation names and GPU power-limit settings.
+
 ## The model is large for a reason
 
 Calling the checkpoint “INT4” is incomplete. The target backbone uses Intel's

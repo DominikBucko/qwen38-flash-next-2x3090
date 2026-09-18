@@ -1,5 +1,18 @@
 # Benchmark evidence
 
+## September 18 experimental long-context progress
+
+The latest candidate completed 260,096 input + 2,048 output tokens in 163.6
+seconds: **139.8 seconds to first token**, then **86.2 tok/s decode**.
+The earlier screen took 214.5 seconds to first token at the same input length.
+This is about 35% less waiting across single screens, with different preceding
+cache states; it is not a repeated one-change A/B.
+
+The [September 18 report](../benchmarks/2026-09-18/README.md) includes prefill
+curves, source data and a separate fresh-agent smoke on the preceding candidate:
+1,478 new-token/s prefill, 79.4 tok/s decode and 75% prefix reuse. These results
+come from experimental images, not the default launcher or a new checkpoint.
+
 ## September 16 fresh Docker validation
 
 The public Dockerfile was built from an empty Docker image cache and started
