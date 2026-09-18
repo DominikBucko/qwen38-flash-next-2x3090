@@ -30,7 +30,10 @@ the weights require its custom vLLM overlay.
 
 ## New: full 256K context in 140 seconds
 
-**1,860 input tok/s · 86.2 decode tok/s · 2× RTX 3090 + 128 GB RAM**
+**1,860 tok/s prefill · 89.1 tok/s decode · 2× RTX 3090 + 128 GB RAM**
+
+Experimental peaks from separate requests: prefill at 260,096 input tokens;
+decode after 131,072 input tokens. Each generates 2,048 tokens.
 
 The latest experimental runtime reaches the first token in **139.8 seconds**
 with 260,096 input tokens, then generates 2,048 tokens at **86.2 tok/s**.

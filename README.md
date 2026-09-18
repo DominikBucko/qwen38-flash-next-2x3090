@@ -1,8 +1,8 @@
 # Qwen3.8-Flash-Next on 2× RTX 3090
 
-<h2 align="center">256K context: first token in 140 s · 86.2 tok/s decode</h2>
+<h2 align="center">1,860 tok/s prefill · 89.1 tok/s decode</h2>
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
-<p align="center">New experimental runtime result · 260,096 input + 2,048 output · one measured request</p>
+<p align="center">Experimental peaks from separate requests: prefill at 260,096 input tokens; decode after 131,072 input tokens. Each generates 2,048 tokens.</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
