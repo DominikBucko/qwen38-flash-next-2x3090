@@ -1,7 +1,8 @@
 # Qwen3.8-Flash-Next on 2× RTX 3090
 
-<h2 align="center">1,402 tok/s prefill · 135.2 tok/s decode</h2>
+<h2 align="center">256K context: first token in 140 s · 86.2 tok/s decode</h2>
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
+<p align="center">New experimental runtime result · 260,096 input + 2,048 output · one measured request</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
@@ -12,7 +13,40 @@ The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE
 tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
 
-## Results
+## New: full-context prefill in 140 seconds
+
+The latest experimental build reads a 260,096-token prompt in **139.8 seconds**
+to first token, then generates 2,048 tokens at **86.2 tok/s**. That is
+**1,860 input tok/s**, counting the full wait to first token. The complete
+request takes 163.6 seconds.
+
+Compared with the earlier screen at the same input length, the wait fell from
+214.5 to 139.8 seconds: **about 35% less waiting**, or 75 seconds saved.
+These are single screens with different preceding cache states, not a repeated
+one-change A/B. Input tok/s here means input tokens divided by time to first
+token, not kernel-only prefill.
+
+| Latest candidate | Input + output tokens | First token | Input tok/s | Decode tok/s |
+|---|---:|---:|---:|---:|
+| 128K prompt | 131,072 + 2,048 | **75.9 s** | **1,727** | **89.1** |
+| Full 256K window | 260,096 + 2,048 | **139.8 s** | **1,860** | **86.2** |
+
+![Long-context prefill: earlier screen versus experimental candidates](docs/images/prefill-long-context.svg)
+
+The main change is how large prefills read the GPU/host expert pool. Further
+work warms uncommon kernel shapes before serving and overlaps part of the cold
+expert transfer with compute. The target weights, BF16 KV, FP8 PLE, ten-expert
+routing and approximate QSA budget stay unchanged.
+
+A completed fresh-agent smoke on the **preceding candidate** measured
+**1,478 new-token/s prefill** and **79.4 tok/s decode**, with **75% prefix reuse**
+across 13 requests. It passed that task; this is not a new 15-task suite score.
+
+**These runtime changes are experimental and are not in the default launcher
+or a published image yet.** This update publishes the measurements, not a new
+runtime or checkpoint. See the [results, curves and test conditions](benchmarks/2026-09-18/README.md).
+
+## Historical results: 1,402 prefill · 135.2 warm decode
 
 | Workload | Shape | Speed |
 |---|---:|---:|
@@ -81,9 +115,12 @@ together. The target still verifies every accepted token.
 
 ### What 256K costs
 
-With 262,016 input tokens already in the cache, decode falls to 54.5 tok/s. That
-is the price of the larger KV state and longer attention path. The balanced
-profile prefills the same prompt at 1,275.6 tok/s. A static expert cache reached
+The original 262,016-input boundary probe measured 54.5 tok/s over just 128
+output tokens. That short probe does not establish sustained decode speed or
+isolate the cost of longer attention. The new experimental result above uses
+2,048 output tokens and reaches 86.2 tok/s, so the two tests are not directly
+comparable. The historical balanced profile prefills its prompt at 1,275.6 tok/s.
+A static expert cache reached
 1,629 prompt tok/s, but its decode behavior was worse, so it is not the default.
 
 ## Checkpoint layout
@@ -135,8 +172,9 @@ The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
 Image inputs are optional. See the [vision profile and request example](docs/vision.md).
 
 The default now caches 84 experts per layer to leave more room for prefill.
-Context stays at 256K and precision is unchanged. The results above are historical;
-they are not new hot84 measurements. Set `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`
+Context stays at 256K and precision is unchanged. The original hillclimb results
+are historical; the new experimental results use additional, unreleased changes.
+Neither is a speed guarantee for this launcher. Set `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`
 in `.env` to try the tighter profile. Existing `.env` files keep their old value.
 
 ### If it runs out of memory
@@ -175,6 +213,7 @@ upload commands.
 
 The small JSON summaries are public:
 
+- [September 18 experimental long-context and fresh-agent results](benchmarks/2026-09-18/summary.json)
 - [`benchmarks/serving-summary.json`](benchmarks/serving-summary.json)
 - [`benchmarks/hillclimb.json`](benchmarks/hillclimb.json)
 - [`benchmarks/agentbench-summary.json`](benchmarks/agentbench-summary.json)

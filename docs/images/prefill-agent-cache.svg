@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="945" viewBox="0 0 1120 945" role="img" aria-labelledby="title desc">
+<title id="title">Fresh-agent prefill and prefix reuse</title>
+<desc id="desc">One completed task, thirteen requests on the preceding tiered and warmup candidate. New prefill throughput excludes cache hits. Context grows to 30,084 tokens.</desc>
+<!-- source-json-sha256: c0c082fbcf5e99d5365fd5f1ba62853d1d211f78dfcfcd79f1f0cb4b17e51002 -->
+<rect width="1120" height="945" fill="#ffffff"/>
+<text x="65.0" y="56.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="700" fill="#172033">Fresh agent: compute only the new part</text>
+<text x="65.0" y="92.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="21" font-weight="400" fill="#637083">Preceding tiered + warmup candidate · one completed task · 13 requests</text>
+<text x="65.0" y="141.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="26" font-weight="700" fill="#172033">1,478 new tok/s aggregate · 75% prompt tokens reused</text>
+<line x1="112.0" y1="404.0" x2="1020.0" y2="404.0" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="410.0" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">0</text>
+<line x1="112.0" y1="354.5" x2="1020.0" y2="354.5" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="360.5" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">500</text>
+<line x1="112.0" y1="305.0" x2="1020.0" y2="305.0" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="311.0" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">1,000</text>
+<line x1="112.0" y1="255.5" x2="1020.0" y2="255.5" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="261.5" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">1,500</text>
+<line x1="112.0" y1="206.0" x2="1020.0" y2="206.0" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="212.0" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">2,000</text>
+<line x1="112.0" y1="206.0" x2="112.0" y2="404.0" stroke="#637083" stroke-width="1"/>
+<line x1="112.0" y1="404.0" x2="1020.0" y2="404.0" stroke="#637083" stroke-width="1"/>
+<text x="112.0" y="188.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#637083">New prefill tokens/s</text>
+<line x1="112.0" y1="255.5" x2="1020.0" y2="255.5" stroke="#172033" stroke-width="1.5" stroke-dasharray="7 6"/>
+<text x="1020.0" y="242.5" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#637083">1,500 target</text>
+<polyline points="112.00,252.83 187.67,284.06 263.33,241.48 339.00,280.70 414.67,231.25 490.33,283.26 566.00,234.42 641.67,264.79 717.33,240.17 793.00,232.42 868.67,252.13 944.33,261.38 1020.00,251.67" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="112.00" cy="252.83" r="5" fill="#2563eb"/>
+<circle cx="187.67" cy="284.06" r="5" fill="#2563eb"/>
+<circle cx="263.33" cy="241.48" r="5" fill="#2563eb"/>
+<circle cx="339.00" cy="280.70" r="5" fill="#2563eb"/>
+<circle cx="414.67" cy="231.25" r="5" fill="#2563eb"/>
+<circle cx="490.33" cy="283.26" r="5" fill="#2563eb"/>
+<circle cx="566.00" cy="234.42" r="5" fill="#2563eb"/>
+<circle cx="641.67" cy="264.79" r="5" fill="#2563eb"/>
+<circle cx="717.33" cy="240.17" r="5" fill="#2563eb"/>
+<circle cx="793.00" cy="232.42" r="5" fill="#2563eb"/>
+<circle cx="868.67" cy="252.13" r="5" fill="#2563eb"/>
+<circle cx="944.33" cy="261.38" r="5" fill="#2563eb"/>
+<circle cx="1020.00" cy="251.67" r="5" fill="#2563eb"/>
+<text x="112.0" y="434.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">1</text>
+<text x="339.0" y="434.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">4</text>
+<text x="566.0" y="434.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">7</text>
+<text x="793.0" y="434.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">10</text>
+<text x="1020.0" y="434.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">13</text>
+<text x="565.0" y="468.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="400" fill="#637083">Request number</text>
+<polyline points="112.00,516.00 142.00,516.00" fill="none" stroke="#637083" stroke-width="3" stroke-dasharray="8 6"/>
+<rect x="107.00" y="511.00" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="137.00" y="511.00" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<text x="155.0" y="523.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="400" fill="#172033">Total prompt</text>
+<polyline points="385.00,516.00 415.00,516.00" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="385.00" cy="516.00" r="5" fill="#2563eb"/>
+<circle cx="415.00" cy="516.00" r="5" fill="#2563eb"/>
+<text x="428.0" y="523.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="400" fill="#172033">Newly computed</text>
+<line x1="112.0" y1="794.0" x2="1020.0" y2="794.0" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="800.0" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">0</text>
+<line x1="112.0" y1="738.2" x2="1020.0" y2="738.2" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="744.2" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">8,000</text>
+<line x1="112.0" y1="682.5" x2="1020.0" y2="682.5" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="688.5" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">16,000</text>
+<line x1="112.0" y1="626.8" x2="1020.0" y2="626.8" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="632.8" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">24,000</text>
+<line x1="112.0" y1="571.0" x2="1020.0" y2="571.0" stroke="#dce3ec" stroke-width="1"/>
+<text x="96.0" y="577.0" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">32,000</text>
+<line x1="112.0" y1="571.0" x2="112.0" y2="794.0" stroke="#637083" stroke-width="1"/>
+<line x1="112.0" y1="794.0" x2="1020.0" y2="794.0" stroke="#637083" stroke-width="1"/>
+<text x="112.0" y="553.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#637083">Prompt tokens</text>
+<polyline points="112.00,729.50 187.67,728.60 263.33,722.82 339.00,718.97 414.67,713.36 490.33,711.24 566.00,648.49 641.67,640.68 717.33,639.12 793.00,637.39 868.67,619.43 944.33,607.19 1020.00,584.35" fill="none" stroke="#637083" stroke-width="3" stroke-dasharray="8 6"/>
+<rect x="107.00" y="724.50" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="182.67" y="723.60" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="258.33" y="717.82" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="334.00" y="713.97" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="409.67" y="708.36" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="485.33" y="706.24" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="561.00" y="643.49" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="636.67" y="635.68" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="712.33" y="634.12" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="788.00" y="632.39" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="863.67" y="614.43" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="939.33" y="602.19" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<rect x="1015.00" y="579.35" width="10" height="10" fill="white" stroke="#637083" stroke-width="2.5"/>
+<polyline points="112.00,729.50 187.67,762.05 263.33,767.42 339.00,763.57 414.67,769.11 490.33,766.99 566.00,771.14 641.67,763.33 717.33,772.92 793.00,771.19 868.67,753.23 944.33,774.44 1020.00,751.60" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="112.00" cy="729.50" r="5" fill="#2563eb"/>
+<circle cx="187.67" cy="762.05" r="5" fill="#2563eb"/>
+<circle cx="263.33" cy="767.42" r="5" fill="#2563eb"/>
+<circle cx="339.00" cy="763.57" r="5" fill="#2563eb"/>
+<circle cx="414.67" cy="769.11" r="5" fill="#2563eb"/>
+<circle cx="490.33" cy="766.99" r="5" fill="#2563eb"/>
+<circle cx="566.00" cy="771.14" r="5" fill="#2563eb"/>
+<circle cx="641.67" cy="763.33" r="5" fill="#2563eb"/>
+<circle cx="717.33" cy="772.92" r="5" fill="#2563eb"/>
+<circle cx="793.00" cy="771.19" r="5" fill="#2563eb"/>
+<circle cx="868.67" cy="753.23" r="5" fill="#2563eb"/>
+<circle cx="944.33" cy="774.44" r="5" fill="#2563eb"/>
+<circle cx="1020.00" cy="751.60" r="5" fill="#2563eb"/>
+<text x="112.0" y="824.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">1</text>
+<text x="339.0" y="824.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">4</text>
+<text x="566.0" y="824.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">7</text>
+<text x="793.0" y="824.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">10</text>
+<text x="1020.0" y="824.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#172033">13</text>
+<text x="565.0" y="858.0" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="400" fill="#637083">Request number</text>
+<text x="65.0" y="904.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="400" fill="#637083">One fresh smoke, not a suite rerun. The latest overlap candidate has no completed fresh task.</text>
+<text x="65.0" y="932.0" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="400" fill="#637083">Source: benchmarks/2026-09-18/summary.json · aggregate = total new tokens / total prefill time</text>
+</svg>
