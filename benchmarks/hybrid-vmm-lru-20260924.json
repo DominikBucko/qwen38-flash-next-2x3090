@@ -1,0 +1,87 @@
+{
+  "claim": "hybrid VMM+LRU expert tier (golden-v2.0): prefill headroom and decode parity on one tier",
+  "date_local": "2026-09-24",
+  "rig": {
+    "gpus": "4x RTX 5060 Ti 16GB, CPU-direct PCIe x8/x4/x8/x4 gen5, P2P via patched driver 615.71.09-p2p",
+    "cpu_ram": "32-core, 128 GB DDR5 (~120 GiB usable)",
+    "host_ram_available_gb_at_boot": {
+      "arm0": 63,
+      "hybrid": 41
+    },
+    "model": "Qwen3.8-Flash-Next W4A16 int4 experts + FP8 PLE (Intel AutoRound target / albucino FP8-PLE assembly)",
+    "engine": "vLLM 0.1.dev20073+g8e685d198, torch 2.13.0+cu130, flashinfer 0.6.17, humming-kernels 0.1.12",
+    "parallelism": "TP4 + EP4, np=1, batch-2 CUDA graphs, MTP off, 495K context (YaRN), pool 517858 (1.05x)"
+  },
+  "method": {
+    "cold_boots": true,
+    "same_window_all_arms": true,
+    "scripts": [
+      "bench-3k500.py",
+      "needle-probe.py"
+    ],
+    "caveat_warm_vs_cold": "the widely quoted 58.35 tok/s golden decode bar is a WARM session number; measured cold in this window the same arm reads 55.41",
+    "caveat_probe_depth": "prefill below ~30k tokens is not a gate; deep prefill and recall are"
+  },
+  "results": {
+    "decode_probe_3k_tok_s": {
+      "arm0_mirror_lru": 55.41,
+      "arm1_vmm_only": 37.59,
+      "hybrid_v2.0": 55.95
+    },
+    "decode_sustained_4k_tok_s": {
+      "arm0_mirror_lru": 61.25,
+      "arm1_vmm_only": 27.74,
+      "hybrid_v2.0": 59.66
+    },
+    "prefill_3k_tok_s": {
+      "arm0_mirror_lru": 1258.0,
+      "arm1_vmm_only": 1670.0,
+      "hybrid_v2.0": 1727.2
+    },
+    "prefill_32k_tok_s": {
+      "arm0_mirror_lru": 1411.8,
+      "arm1_vmm_only": 1838.9,
+      "hybrid_v2.0": 1917.5
+    },
+    "prefill_190k_tok_s": {
+      "arm0_mirror_lru": 1345,
+      "arm1_vmm_only": [
+        1731,
+        1775
+      ],
+      "hybrid_v2.0": [
+        1770,
+        1822
+      ]
+    },
+    "needle_recall_190k": {
+      "arm0_mirror_lru": "pass",
+      "arm1_vmm_only": "pass",
+      "hybrid_v2.0": "pass"
+    },
+    "post_heavy_traffic_sanity": {
+      "hybrid_v2.0": "pass"
+    },
+    "promoted_prod_rerun": {
+      "prefill_3k_tok_s": 1745.3,
+      "prefill_32k_tok_s": 2052.9,
+      "decode_probe_tok_s": 55.11,
+      "decode_sustained_tok_s": 61.3,
+      "math_gate": "437 exact",
+      "recall_190k": "pass"
+    }
+  },
+  "cost": {
+    "host_ram_pinned_added_gib": [
+      19,
+      22
+    ],
+    "vram_added_mib_per_card": 240,
+    "boot_copy_volume_added_pct": 34,
+    "per_step_cost": "none"
+  },
+  "mechanism": "docs/hybrid-vmm-lru-mechanism.md",
+  "narrative": "docs/hybrid-vmm-lru-mechanism.md (contributed via the hybrid VMM+LRU pull request)",
+  "rollback": "PREFILL_VMM_ARM=0 (mirror+LRU) or 1 (VMM-only) in .env + cold boot; module stays mounted and inert",
+  "provenance": "measured in johnmosesventura06/qwen38-hybrid-vmm-lru on 4x RTX 5060 Ti 16 GB; arm 0 and arm 1 are unpatched baselines from the same window"
+}

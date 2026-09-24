@@ -145,11 +145,14 @@ def _update_lru_expert_map_kernel(
     clock_ptr,
     miss_local_ids_ptr,
     miss_slots_ptr,
+    rot_map_ptr,
+    lru_dummy_ptr,
     num_ids: tl.constexpr,
     global_num_experts: tl.constexpr,
     capacity: tl.constexpr,
     id_block: tl.constexpr,
     capacity_block: tl.constexpr,
+    HYBRID: tl.constexpr,
 ):
     id_offsets = tl.arange(0, id_block)
     requested = tl.load(
@@ -201,6 +204,31 @@ def _update_lru_expert_map_kernel(
         old_valid = is_miss & (old_global_id >= 0)
         tl.store(cache_map_ptr + old_global_id, -1, mask=old_valid)
         tl.store(cache_map_ptr + global_safe, victim, mask=is_miss)
+        if HYBRID:
+            # rot_map keeps the prefill access path pointing at each owned
+            # expert's best live copy: the mirror slot while cached (the slot
+            # is VRAM, so prefill rides the rotation too), and the evicted
+            # expert's host-backed row (its cold_map value) once its slot is
+            # handed to the new expert.  lru_dummy_ptr is the non-hybrid
+            # stand-in and is deliberately never dereferenced.
+            tl.store(
+                rot_map_ptr + global_safe,
+                tl.where(is_hit, cache_slot, victim),
+                mask=is_hit | is_miss,
+            )
+            old_cold_row = tl.load(
+                source_map_ptr
+                + tl.minimum(
+                    tl.maximum(old_global_id, 0), global_num_experts - 1
+                ),
+                mask=old_global_id >= 0,
+                other=-1,
+            )
+            tl.store(
+                rot_map_ptr + old_global_id,
+                old_cold_row,
+                mask=old_valid,
+            )
 
         slot_global_ids = tl.where(
             is_miss & (slot_offsets == victim), global_id, slot_global_ids
@@ -295,6 +323,12 @@ class _StaticHotExpertCache:
     clock: torch.Tensor | None = None
     miss_local_ids: torch.Tensor | None = None
     miss_slots: torch.Tensor | None = None
+    # Hybrid only: global-id -> current row of the VMM tensor (mirror slot
+    # while cached, host-backed row once evicted).  None on the golden arm.
+    rot_map: torch.Tensor | None = None
+    # Shared 1-element stand-in for the kernel's rot_map argument on
+    # non-hybrid caches, so the signature change stays call-site compatible.
+    lru_dummy: torch.Tensor | None = None
 
 
 @dataclass
@@ -307,6 +341,10 @@ class _MixedVMMAllocation:
     mapped_bytes: int
     gpu_bytes: int
     host_bytes: int
+    # v2 hybrid only: data bytes of the host-backed duplicate of the hot
+    # prefix (``hot_experts`` rows appended after the full permutation).
+    # Zero on the arm-1 layout.
+    duplicate_data_bytes: int = 0
 
 
 _STATIC_STAGE_BUFFERS: dict[tuple[Any, ...], _StaticStageBuffers] = {}
@@ -391,7 +429,11 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         self._mixed_vmm_enabled = os.getenv(
             "VLLM_WNA16_MIXED_VMM_HOT_CACHE", "0"
         ).lower() in ("1", "true", "yes")
+        self._vmm_lru_hybrid = os.getenv("VLLM_WNA16_VMM_LRU_HYBRID", "0") == "1"
         self._mixed_vmm_active = False
+        # Permutation state recorded by maybe_init_mixed_vmm_hot_cache so the
+        # hybrid initializer can reuse it instead of duplicating the logic.
+        self._mixed_vmm_state: dict[str, Any] | None = None
 
         # Extract quant_type and create weight key for oracle selection
         self.quant_type = (
@@ -1020,6 +1062,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         source: torch.Tensor,
         new_to_old: torch.Tensor,
         hot_experts: int,
+        host_duplicate: bool = False,
     ) -> tuple[torch.Tensor, _MixedVMMAllocation]:
         """Build one contiguous tensor with a VRAM prefix and host suffix.
 
@@ -1027,6 +1070,24 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         geometry and expert count while the CUDA page tables select the
         physical memory tier.  CUDA VMM mappings use a 2 MiB granularity on
         Ampere; padding lives only in storage and is outside the tensor shape.
+
+        With ``host_duplicate`` (v2 hybrid layout) the tensor carries
+        ``hot_experts`` extra rows, so the geometry is:
+
+        - rows ``[0, capacity)``: DEVICE-mapped hot prefix, the capacity
+          statically-hot experts in ranking order (the LRU mirror / decode
+          path reads and rotates these rows in place);
+        - rows ``[capacity, capacity + N)``: HOST-mapped copy of the FULL
+          permutation, i.e. row ``capacity + k`` holds the expert at
+          permuted position ``k``.  Its first ``capacity`` rows duplicate
+          the hot prefix, so EVERY local expert keeps a permanent
+          host-backed row that the LRU can gather from and re-promote;
+          evicting a hot slot is no longer lossy.
+
+        The ``gpu_bytes`` prefix keeps the same formula (aligned UP, never
+        down), so the first ``capacity`` rows are always entirely inside
+        the device-mapped region.  Without ``host_duplicate`` the function
+        produces exactly the arm-1 layout (N rows, no suffix copy).
         """
         from cuda.bindings import driver
 
@@ -1080,9 +1141,10 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             "cuMemGetAllocationGranularity(host)",
         )
         alignment = max(device_granularity, host_granularity)
-        original_bytes = source.numel() * source.element_size()
-        mapped_bytes = ((original_bytes + alignment - 1) // alignment) * alignment
         row_bytes = source[0].numel() * source.element_size()
+        total_rows = source.shape[0] + (hot_experts if host_duplicate else 0)
+        original_bytes = total_rows * row_bytes
+        mapped_bytes = ((original_bytes + alignment - 1) // alignment) * alignment
         gpu_data_bytes = hot_experts * row_bytes
         gpu_bytes = ((gpu_data_bytes + alignment - 1) // alignment) * alignment
         gpu_bytes = min(gpu_bytes, mapped_bytes)
@@ -1135,7 +1197,9 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         metadata = {
             "nbytes": mapped_bytes,
             "data_ptr": int(address),
-            "size": tuple(source.shape),
+            "size": (total_rows, *source.shape[1:]),
+            # source is contiguous (checked above), so the row strides do
+            # not depend on the row count.
             "stride": tuple(source.stride()),
             "dtype": source.dtype,
             "device": source.device,
@@ -1145,15 +1209,38 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             metadata, storage
         )
         row_size = source[0].numel()
-        grid = (source.shape[0], triton.cdiv(row_size, 1024))
+        if host_duplicate:
+            # Boot-time one-off fill of BOTH regions in a single pass:
+            # rows [0, capacity) take the hot permutation (the device
+            # prefix), rows [capacity, capacity + N) take the SAME full
+            # permutation again (the host duplicate region).  Total copied
+            # volume is N + capacity rows, the same order as the old N-row
+            # fill; nothing here runs per step.
+            fill_new_to_old = torch.cat([new_to_old[:hot_experts], new_to_old])
+        else:
+            fill_new_to_old = new_to_old
+        grid = (total_rows, triton.cdiv(row_size, 1024))
         _permute_expert_rows_kernel[grid](
             source,
             output,
-            new_to_old,
+            fill_new_to_old,
             row_size=row_size,
             block_size=1024,
             num_warps=8,
         )
+        if host_duplicate:
+            # Row-content canary (reviewer F3): every map addresses the host
+            # region as if it began with a copy of the device prefix.  Map
+            # arithmetic asserts cannot see a fill-order mistake, so compare
+            # bytes here, once per layer-rank at boot.
+            prefix_rows = output[:hot_experts]
+            duplicate_rows = output[hot_experts : 2 * hot_experts]
+            if prefix_rows.shape[0] and not torch.equal(prefix_rows, duplicate_rows):
+                raise RuntimeError(
+                    "Mixed VMM host duplicate does not mirror the device prefix "
+                    f"(prefix {tuple(prefix_rows.shape)} vs duplicate "
+                    f"{tuple(duplicate_rows.shape)})"
+                )
         # The source parameter can be replaced immediately after this returns.
         torch.cuda.synchronize(source.device)
         allocation = _MixedVMMAllocation(
@@ -1163,6 +1250,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             mapped_bytes=mapped_bytes,
             gpu_bytes=gpu_bytes,
             host_bytes=host_bytes,
+            duplicate_data_bytes=hot_experts * row_bytes if host_duplicate else 0,
         )
         _MIXED_VMM_ALLOCATIONS.append(allocation)
         return output, allocation
@@ -1216,6 +1304,9 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             )
         original_map_cpu = [int(value) for value in original_map.detach().cpu().tolist()]
         hot_local_ids: list[int] = []
+        # Same filtered ranking order as hot_local_ids; the hybrid mirror's
+        # slot i initial occupant is hot_global_ids[i].
+        hot_global_ids: list[int] = []
         seen: set[int] = set()
         for raw_global_id in ranked_global_ids:
             global_id = int(raw_global_id)
@@ -1225,6 +1316,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             if local_id < 0 or local_id in seen:
                 continue
             hot_local_ids.append(local_id)
+            hot_global_ids.append(global_id)
             seen.add(local_id)
             if len(hot_local_ids) == capacity:
                 break
@@ -1240,8 +1332,33 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         old_to_new = [0] * local_num_experts
         for new_id, old_id in enumerate(new_to_old_list):
             old_to_new[old_id] = new_id
+        # v2 hybrid layout: every tensor gets `capacity` extra host-backed
+        # duplicate rows so that EVERY local expert (hot or cold) keeps a
+        # permanent host row, exactly like the golden dynamic-LRU arm where
+        # cold_map[g] is the layer's own local id for all locals.  The flag
+        # mirrors the gate in maybe_init_static_hot_cache, so arm-1
+        # (MIXED_VMM without LRU/hybrid) keeps today's N-row layout.
+        capacity = len(hot_local_ids)
+        host_duplicate = bool(
+            self._dynamic_lru_enabled
+            and getattr(
+                self,
+                "_vmm_lru_hybrid",
+                os.getenv("VLLM_WNA16_VMM_LRU_HYBRID", "0") == "1",
+            )
+        )
+        total_rows = local_num_experts + (capacity if host_duplicate else 0)
+
+        def _served_row(new_row: int) -> int:
+            # Row that serves the expert at permuted position `new_row`:
+            # hot rows stay in the device prefix; cold experts are served
+            # from the host duplicate region at `capacity + new_row`.
+            if host_duplicate and new_row >= capacity:
+                return capacity + new_row
+            return new_row
+
         new_map_cpu = [
-            -1 if old_id < 0 else old_to_new[old_id]
+            -1 if old_id < 0 else _served_row(old_to_new[old_id])
             for old_id in original_map_cpu
         ]
         new_map = torch.tensor(
@@ -1250,6 +1367,13 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         new_to_old = torch.tensor(
             new_to_old_list, dtype=torch.long, device=w13.device
         )
+        if host_duplicate:
+            # Same extension for the <64 MiB regular tensors so ALL expert
+            # tensors share one row space [0, total_rows) and one cold_map
+            # addresses all of them (invariant 4 of the spec, extended).
+            permute_index = torch.cat([new_to_old[:capacity], new_to_old])
+        else:
+            permute_index = new_to_old
 
         tensor_names = (
             "w13_weight_packed",
@@ -1265,8 +1389,10 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             "w13_weight_shape",
             "w2_weight_shape",
         )
+        installed_tensors: dict[str, torch.Tensor] = {}
         vmm_gpu_bytes = 0
         vmm_host_bytes = 0
+        vmm_dup_bytes = 0
         regular_gpu_bytes = 0
         with torch.no_grad():
             for name in tensor_names:
@@ -1279,18 +1405,30 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                     continue
                 if tensor.numel() * tensor.element_size() >= 64 * 1024 * 1024:
                     reordered, allocation = self._allocate_mixed_vmm_tensor(
-                        tensor, new_to_old, len(hot_local_ids)
+                        tensor,
+                        new_to_old,
+                        len(hot_local_ids),
+                        host_duplicate=host_duplicate,
                     )
                     vmm_gpu_bytes += allocation.gpu_bytes
                     vmm_host_bytes += allocation.host_bytes
+                    vmm_dup_bytes += allocation.duplicate_data_bytes
                 else:
-                    reordered = torch.index_select(tensor, 0, new_to_old).contiguous()
+                    reordered = (
+                        torch.index_select(tensor, 0, permute_index)
+                        .contiguous()
+                    )
                     regular_gpu_bytes += reordered.numel() * reordered.element_size()
+                    if host_duplicate:
+                        # The duplicated hot rows of a regular (small)
+                        # tensor: capacity rows of the source geometry.
+                        vmm_dup_bytes += capacity * tensor[0].numel() * tensor.element_size()
                 replace_parameter(
                     layer,
                     name,
                     torch.nn.Parameter(reordered, requires_grad=False),
                 )
+                installed_tensors[name] = reordered
             # RoutedExperts exposes expert_map as a read-only property backed
             # by the registered _expert_map buffer.  Keep the manager in sync
             # as well so a later consumer cannot observe the pre-permutation
@@ -1299,6 +1437,24 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             layer.expert_map_manager._expert_map = new_map
             layer.w13_weight = layer.w13_weight_packed
             layer.w2_weight = layer.w2_weight_packed
+            if host_duplicate:
+                # Extended row space: the Humming experts assert
+                # w1.size(0) == humming_configs["*"].num_experts on every
+                # forward (moe_problem_size) and size their grouped-permute
+                # buffers from moe_config.num_local_experts, so the MAIN
+                # kernel must be bound with the total row count in hybrid
+                # mode.  The mirror kernel still binds `capacity` slots via
+                # _make_hot_cache_kernel's own replace().  The swap is
+                # permanent on purpose: the fn-ext AutoGPTQ VMM shim calls
+                # self._setup_kernel(layer) a second time after re-aliasing,
+                # outside this function's scope.
+                self.moe = replace(self.moe, num_local_experts=total_rows)
+                humming_configs = getattr(layer, "humming_configs", None)
+                if humming_configs is not None:
+                    layer.humming_configs = {
+                        name: replace(config, num_experts=total_rows)
+                        for name, config in humming_configs.items()
+                    }
             self._setup_kernel(layer)
         # UVA offloading obtains its backing through PyTorch's pinned-host
         # allocator.  Replacing those parameters releases the tensors, but the
@@ -1307,6 +1463,23 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         del w13, w2
         torch.accelerator.empty_host_cache()
         self._mixed_vmm_active = True
+        # Stash everything the VMM+LRU hybrid needs so it can mount the LRU
+        # mirror on this GPU prefix without recomputing the permutation.
+        self._mixed_vmm_state = {
+            "original_map": original_map,
+            "new_map": new_map,
+            "hot_global_ids": hot_global_ids,
+            "hot_local_ids": hot_local_ids,
+            "new_to_old_list": new_to_old_list,
+            "old_to_new": old_to_new,
+            "local_num_experts": local_num_experts,
+            "tensors": installed_tensors,
+            # v2 hybrid additions.
+            "host_duplicate": host_duplicate,
+            "total_rows": total_rows,
+            "vmm_gpu_bytes": vmm_gpu_bytes,
+            "vmm_dup_bytes": vmm_dup_bytes,
+        }
         logger.info(
             "Mixed WNA16 VMM cache: layer=%s hot=%d gpu=%.2f MiB "
             "host=%.2f MiB regular_gpu=%.2f MiB",
@@ -1315,6 +1488,309 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             vmm_gpu_bytes / (1024 * 1024),
             vmm_host_bytes / (1024 * 1024),
             regular_gpu_bytes / (1024 * 1024),
+        )
+
+    def _make_hot_cache_kernel(
+        self,
+        layer: RoutedExperts,
+        mirror_w13_scale: torch.Tensor | None,
+        mirror_w2_scale: torch.Tensor | None,
+        mirror_w13_zp: torch.Tensor | None,
+        mirror_w2_zp: torch.Tensor | None,
+        kernel_w13_scale: torch.Tensor | None,
+        kernel_w2_scale: torch.Tensor | None,
+        kernel_w13_zp: torch.Tensor | None,
+        kernel_w2_zp: torch.Tensor | None,
+        kernel_w13_g_idx: torch.Tensor | None,
+        kernel_w2_g_idx: torch.Tensor | None,
+        kernel_w13_sort: torch.Tensor | None,
+        kernel_w2_sort: torch.Tensor | None,
+        num_slots: int,
+    ) -> Any:
+        """Build the second MoE kernel invocation that evaluates only the
+        mirror rows (``hot_map``).
+
+        Shared verbatim between the golden static mirror (mirror tensors are
+        dedicated VRAM copies, possibly with staged scale/zp/g_idx/sort
+        buffers) and the VMM+LRU hybrid (mirror tensors are zero-copy VMM
+        prefix views and every ``kernel_*`` argument equals its ``mirror_*``
+        counterpart).  The HUMMING branch keeps the original pairing: the
+        quant config points at the mirror scale/zero-point tensors while the
+        kernel receives the (possibly staged) g_idx/sort tensors.
+        """
+        cache_moe_config = self.moe
+        if self.wna16_backend == WNA16MoEBackend.HUMMING:
+            from vllm.model_executor.layers.quantization.utils.humming_utils import (
+                get_humming_moe_quant_config,
+            )
+
+            cache_humming_configs = {
+                name: replace(config, num_experts=num_slots)
+                for name, config in layer.humming_configs.items()
+            }
+            cache_quant_config = get_humming_moe_quant_config(
+                layer,
+                humming_configs=cache_humming_configs,
+                gemm1_clamp_limit=getattr(layer, "swiglu_limit", None),
+                gemm1_alpha=getattr(layer, "swiglu_alpha", None),
+                gemm1_beta=getattr(layer, "swiglu_beta", None),
+            )
+            cache_quant_config = replace(
+                cache_quant_config,
+                _w1=replace(
+                    cache_quant_config._w1,
+                    scale=mirror_w13_scale,
+                    zp=mirror_w13_zp,
+                ),
+                _w2=replace(
+                    cache_quant_config._w2,
+                    scale=mirror_w2_scale,
+                    zp=mirror_w2_zp,
+                ),
+            )
+            cache_moe_config = replace(
+                self.moe, num_local_experts=num_slots
+            )
+        else:
+            cache_quant_config = make_wna16_moe_quant_config(
+                w1_scale=kernel_w13_scale,
+                w2_scale=kernel_w2_scale,
+                group_size=self.group_size,
+                num_bits=self.num_bits,
+                w1_zp=kernel_w13_zp,
+                w2_zp=kernel_w2_zp,
+                gemm1_clamp_limit=getattr(layer, "swiglu_limit", None),
+                gemm1_alpha=getattr(layer, "swiglu_alpha", None),
+                gemm1_beta=getattr(layer, "swiglu_beta", None),
+            )
+        assert self.experts_cls is not None
+        return make_wna16_moe_kernel(
+            moe_quant_config=cache_quant_config,
+            moe_config=cache_moe_config,
+            experts_cls=self.experts_cls,
+            backend=self.wna16_backend,
+            routing_tables=layer._expert_routing_tables(),
+            w13_g_idx=kernel_w13_g_idx,
+            w2_g_idx=kernel_w2_g_idx,
+            w13_g_idx_sort_indices=kernel_w13_sort,
+            w2_g_idx_sort_indices=kernel_w2_sort,
+            is_k_full=self.is_k_full,
+        )
+
+    def maybe_init_mixed_vmm_lru_hybrid(self, layer: RoutedExperts) -> None:
+        """One tier, two access paths: keep the VMM contiguous expert view
+        for prefill and mount the dynamic LRU mirror on its GPU prefix for
+        decode.
+
+        The golden mirror and the VMM prefix are built from the same ranking
+        in the same order, so the mirror is a zero-copy ``[:capacity]`` view
+        of every permuted tensor and adds no VRAM.  Consequently ``cold_map``
+        points at VMM row indices (the host-backed copy of each expert) and
+        the prefill-size path routes through the dynamic ``cache.rot_map``
+        (see apply()), which starts as exactly the installed permutation map
+        in the extended row space.
+
+        v2 LAYOUT (the hot-eviction fix): the VMM tensors carry
+        ``capacity + local_num_experts`` rows — the device-mapped hot prefix
+        ``[0, capacity)`` plus a host-mapped copy of the FULL permutation at
+        ``[capacity, capacity + N)``.  Every local expert therefore keeps a
+        permanent host-backed row (``cold_map[g] >= capacity`` for ALL local
+        g, exactly golden's "cold_map = local id for every local expert"),
+        so evicting a statically-hot slot writes over a DUPLICATE and the
+        victim can always be re-promoted: the rotation is lossless for hot
+        experts too (v1 dropped them from rot_map/hot_map with -1 and lost
+        their only copy — see docs/hybrid-implementation-notes.md §5).
+        """
+        if self._static_hot_cache is not None:
+            raise RuntimeError(
+                f"Static expert cache already initialized: {self.layer_name}"
+            )
+        # The VMM initializer leaves no state behind when it declines this
+        # layer (no rankings, non-UVA tensors, unsupported backend); in that
+        # case the layer keeps plain arm-1 behaviour with no cache at all.
+        self._mixed_vmm_state = None
+        # Instance lookup on purpose: on the live lane self is an AutoGPTQ
+        # MoE method whose shim must also run its name re-alias after VMM.
+        self.maybe_init_mixed_vmm_hot_cache(layer)
+        state = getattr(self, "_mixed_vmm_state", None)
+        if state is None:
+            return
+        if not state["host_duplicate"]:
+            # Unreachable through the gate (this function is only entered
+            # with the hybrid flag on, which is the same condition the VMM
+            # init used to pick the duplicate layout).  Fail loudly rather
+            # than mount an LRU over v1's lossy rows.
+            raise RuntimeError(
+                "VMM+LRU hybrid requires the v2 duplicate layout; "
+                "maybe_init_mixed_vmm_hot_cache declined to enable it"
+            )
+
+        original_map = state["original_map"]
+        hot_global_ids = list(state["hot_global_ids"])
+        hot_local_ids = list(state["hot_local_ids"])
+        old_to_new = state["old_to_new"]
+        local_num_experts = int(state["local_num_experts"])
+        capacity = len(hot_local_ids)
+        total_rows = int(state["total_rows"])
+        assert total_rows == local_num_experts + capacity
+        if capacity <= 0:
+            return
+
+        checkpoint_names = (
+            ("w13_weight", "w13_weight_packed"),
+            ("w2_weight", "w2_weight_packed"),
+            ("w13_scale", "w13_weight_scale"),
+            ("w2_scale", "w2_weight_scale"),
+            ("w13_zp", "w13_weight_zero_point"),
+            ("w2_zp", "w2_weight_zero_point"),
+            ("w13_g_idx", "w13_weight_g_idx"),
+            ("w2_g_idx", "w2_weight_g_idx"),
+            ("w13_sort", "w13_g_idx_sort_indices"),
+            ("w2_sort", "w2_g_idx_sort_indices"),
+        )
+        with torch.no_grad():
+            mirrors: dict[str, torch.Tensor | None] = {}
+            for cache_name, checkpoint_name in checkpoint_names:
+                tensor = state["tensors"].get(checkpoint_name)
+                # Non-expert-indexed or absent tensors (e.g. zero points on a
+                # symmetric checkpoint) stay None exactly like golden's
+                # _cache_expert_rows pass-through.
+                mirrors[cache_name] = (
+                    None
+                    if tensor is None
+                    or tensor.ndim == 0
+                    or tensor.shape[0] != total_rows
+                    else tensor[:capacity]
+                )
+            assert mirrors["w13_weight"] is not None
+            assert mirrors["w2_weight"] is not None
+            assert mirrors["w13_scale"] is not None
+            assert mirrors["w2_scale"] is not None
+            if self.is_marlin:
+                assert mirrors["w13_g_idx"] is not None
+                assert mirrors["w2_g_idx"] is not None
+                assert mirrors["w13_sort"] is not None
+                assert mirrors["w2_sort"] is not None
+
+            original_map_cpu = [int(v) for v in original_map.detach().cpu().tolist()]
+            hot_map = torch.full_like(original_map, -1)
+            cold_map = torch.full_like(original_map, -1)
+            for global_id, local_id in enumerate(original_map_cpu):
+                if local_id >= 0:
+                    # v2: EVERY local expert (hot or cold) gets the row
+                    # index of its permanent host-backed copy, the exact
+                    # analogue of golden's cold_map = local-id-for-all-
+                    # locals.  Always >= capacity, never a prefix row:
+                    # gather sources stay disjoint from slots (invariant 1)
+                    # AND stay valid in the extended row space.
+                    cold_map[global_id] = capacity + old_to_new[local_id]
+            for slot, global_id in enumerate(hot_global_ids):
+                hot_map[global_id] = slot
+
+            cache_kernel = CompressedTensorsWNA16MoEMethod._make_hot_cache_kernel(
+                self,
+                layer,
+                mirrors["w13_scale"],
+                mirrors["w2_scale"],
+                mirrors["w13_zp"],
+                mirrors["w2_zp"],
+                mirrors["w13_scale"],
+                mirrors["w2_scale"],
+                mirrors["w13_zp"],
+                mirrors["w2_zp"],
+                mirrors["w13_g_idx"],
+                mirrors["w2_g_idx"],
+                mirrors["w13_sort"],
+                mirrors["w2_sort"],
+                capacity,
+            )
+
+            device = original_map.device
+            miss_rows = (
+                self._static_hot_cache_max_tokens * self.moe.experts_per_token
+            )
+            rot_map = state["new_map"].clone()
+            self._static_hot_cache = _StaticHotExpertCache(
+                w13_weight=mirrors["w13_weight"],
+                w2_weight=mirrors["w2_weight"],
+                w13_scale=mirrors["w13_scale"],
+                w2_scale=mirrors["w2_scale"],
+                w13_zp=mirrors["w13_zp"],
+                w2_zp=mirrors["w2_zp"],
+                w13_g_idx=mirrors["w13_g_idx"],
+                w2_g_idx=mirrors["w2_g_idx"],
+                w13_sort=mirrors["w13_sort"],
+                w2_sort=mirrors["w2_sort"],
+                hot_map=hot_map,
+                cold_map=cold_map,
+                kernel=cache_kernel,
+                global_ids=tuple(hot_global_ids),
+                stage=None,
+                dynamic_lru=True,
+                slot_global_ids=torch.tensor(
+                    hot_global_ids, dtype=torch.int32, device=device
+                ),
+                slot_ages=torch.arange(
+                    capacity, 0, -1, dtype=torch.int32, device=device
+                ),
+                clock=torch.tensor([capacity], dtype=torch.int32, device=device),
+                miss_local_ids=torch.empty(
+                    miss_rows, dtype=torch.int32, device=device
+                ),
+                miss_slots=torch.empty(
+                    miss_rows, dtype=torch.int32, device=device
+                ),
+                rot_map=rot_map,
+                lru_dummy=torch.zeros(1, dtype=torch.int32, device=device),
+            )
+
+            # Invariants checked once at install time (spec section 4, v2):
+            # 1. gather sources come from cold_map values and destinations
+            #    are slots: sources are ALWAYS in the host-backed duplicate
+            #    region [capacity, capacity + N) for every local expert
+            #    (hot included), destinations are < capacity, so no gather
+            #    can ever alias a live prefix row.
+            cold_cpu = cold_map.detach().cpu().tolist()
+            assert all(
+                value == -1 or capacity <= value < capacity + local_num_experts
+                for value in cold_cpu
+            )
+            # 1b. uniformity: no local expert is left without a host row
+            #     (the v1 flaw: hot experts carried cold_map = -1).
+            assert all(
+                cold_cpu[g] >= capacity
+                for g, local in enumerate(original_map_cpu)
+                if local >= 0
+            )
+            # 3. the mirror view content equals the ranking order equals the
+            #    slot_global_ids initial state: rank i expert sits at row i
+            #    of the device prefix AND at row capacity + i of the host
+            #    duplicate region.
+            assert all(
+                old_to_new[local_id] == slot
+                for slot, local_id in enumerate(hot_local_ids)
+            )
+            # 5. the prefill map starts as exactly the installed VMM map
+            #    (prefix rows for the hot experts, host rows for the cold
+            #    experts), and every row it names exists in the tensor.
+            assert rot_map.equal(state["new_map"])
+            rot_cpu = rot_map.detach().cpu().tolist()
+            assert all(value == -1 or 0 <= value < total_rows for value in rot_cpu)
+            # All maps share the installed expert_map's device and dtype.
+            assert (
+                hot_map.dtype == cold_map.dtype == rot_map.dtype
+                == original_map.dtype
+            )
+
+        logger.info(
+            "[hybrid] VMM+LRU cache: layer=%s capacity=%d tensor_rows=%d "
+            "device_prefix=%.2f MiB host_duplicate=%.2f MiB ids=%s",
+            self.layer_name,
+            capacity,
+            total_rows,
+            int(state["vmm_gpu_bytes"]) / (1024 * 1024),
+            int(state["vmm_dup_bytes"]) / (1024 * 1024),
+            hot_global_ids,
         )
 
     def maybe_init_static_hot_cache(self, layer: RoutedExperts) -> None:
@@ -1327,6 +1803,25 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         """
         if self._mixed_vmm_enabled and not self._dynamic_lru_enabled:
             self.maybe_init_mixed_vmm_hot_cache(layer)
+            return
+        if (
+            self._mixed_vmm_enabled
+            and self._dynamic_lru_enabled
+            and getattr(
+                self,
+                "_vmm_lru_hybrid",
+                os.getenv("VLLM_WNA16_VMM_LRU_HYBRID", "0") == "1",
+            )
+        ):
+            # Class-function call because self may be a borrowed AutoGPTQ MoE
+            # method (fn-ext auto_gptq shim) whose class carries neither this
+            # method nor the __init__ flag; the env fallback mirrors __init__
+            # for that case.  With the hybrid flag off, MIXED_VMM=1 + LRU=1
+            # keeps falling through to the golden mirror path exactly as
+            # today.
+            CompressedTensorsWNA16MoEMethod.maybe_init_mixed_vmm_lru_hybrid(
+                self, layer
+            )
             return
         capacity = int(os.getenv("VLLM_WNA16_STATIC_HOT_CACHE_SIZE", "0"))
         cache_file = os.getenv("VLLM_WNA16_STATIC_HOT_CACHE_FILE")
@@ -1480,63 +1975,26 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                 kernel_w13_sort = stage.w13_sort
                 kernel_w2_sort = stage.w2_sort
 
-            cache_moe_config = self.moe
-            if self.wna16_backend == WNA16MoEBackend.HUMMING:
-                from vllm.model_executor.layers.quantization.utils.humming_utils import (
-                    get_humming_moe_quant_config,
-                )
-
-                cache_humming_configs = {
-                    name: replace(config, num_experts=len(global_ids))
-                    for name, config in layer.humming_configs.items()
-                }
-                cache_quant_config = get_humming_moe_quant_config(
-                    layer,
-                    humming_configs=cache_humming_configs,
-                    gemm1_clamp_limit=getattr(layer, "swiglu_limit", None),
-                    gemm1_alpha=getattr(layer, "swiglu_alpha", None),
-                    gemm1_beta=getattr(layer, "swiglu_beta", None),
-                )
-                cache_quant_config = replace(
-                    cache_quant_config,
-                    _w1=replace(
-                        cache_quant_config._w1,
-                        scale=hot_w13_scale,
-                        zp=hot_w13_zp,
-                    ),
-                    _w2=replace(
-                        cache_quant_config._w2,
-                        scale=hot_w2_scale,
-                        zp=hot_w2_zp,
-                    ),
-                )
-                cache_moe_config = replace(
-                    self.moe, num_local_experts=len(global_ids)
-                )
-            else:
-                cache_quant_config = make_wna16_moe_quant_config(
-                    w1_scale=kernel_w13_scale,
-                    w2_scale=kernel_w2_scale,
-                    group_size=self.group_size,
-                    num_bits=self.num_bits,
-                    w1_zp=kernel_w13_zp,
-                    w2_zp=kernel_w2_zp,
-                    gemm1_clamp_limit=getattr(layer, "swiglu_limit", None),
-                    gemm1_alpha=getattr(layer, "swiglu_alpha", None),
-                    gemm1_beta=getattr(layer, "swiglu_beta", None),
-                )
-            assert self.experts_cls is not None
-            cache_kernel = make_wna16_moe_kernel(
-                moe_quant_config=cache_quant_config,
-                moe_config=cache_moe_config,
-                experts_cls=self.experts_cls,
-                backend=self.wna16_backend,
-                routing_tables=layer._expert_routing_tables(),
-                w13_g_idx=kernel_w13_g_idx,
-                w2_g_idx=kernel_w2_g_idx,
-                w13_g_idx_sort_indices=kernel_w13_sort,
-                w2_g_idx_sort_indices=kernel_w2_sort,
-                is_k_full=self.is_k_full,
+            # Same construction as before, lifted verbatim into the helper
+            # shared with the hybrid (mirror_* == hot_*, kernel_* == the
+            # staged-or-hot tensors chosen above).  Called as a class
+            # function so it also resolves on a borrowed AutoGPTQ self.
+            cache_kernel = CompressedTensorsWNA16MoEMethod._make_hot_cache_kernel(
+                self,
+                layer,
+                hot_w13_scale,
+                hot_w2_scale,
+                hot_w13_zp,
+                hot_w2_zp,
+                kernel_w13_scale,
+                kernel_w2_scale,
+                kernel_w13_zp,
+                kernel_w2_zp,
+                kernel_w13_g_idx,
+                kernel_w2_g_idx,
+                kernel_w13_sort,
+                kernel_w2_sort,
+                len(global_ids),
             )
 
         self._static_hot_cache = _StaticHotExpertCache(
@@ -1598,6 +2056,11 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                     dtype=torch.int32,
                     device=original_map.device,
                 )
+                if self._dynamic_lru_enabled
+                else None
+            ),
+            lru_dummy=(
+                torch.zeros(1, dtype=torch.int32, device=original_map.device)
                 if self._dynamic_lru_enabled
                 else None
             ),
@@ -1793,6 +2256,13 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         w13_weight = getattr(layer, "w13_weight", layer.w13_weight_packed)
         w2_weight = getattr(layer, "w2_weight", layer.w2_weight_packed)
         cache = self._static_hot_cache
+        # Hybrid: rotation moves experts between the VMM GPU prefix and the
+        # host-backed suffix, so the prefill-size path must follow the
+        # dynamic rot_map instead of the static permutation map.  Golden
+        # caches have no rot_map and keep today's behaviour exactly.
+        plain_map = layer.expert_map
+        if cache is not None and cache.rot_map is not None:
+            plain_map = cache.rot_map
         if cache is None or x.shape[0] > self._static_hot_cache_max_tokens:
             return self.moe_kernel.apply(
                 x,
@@ -1802,7 +2272,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                 topk_ids=topk_ids,
                 activation=layer.activation,
                 global_num_experts=layer.global_num_experts,
-                expert_map=layer.expert_map,
+                expert_map=plain_map,
                 apply_router_weight_on_input=layer.apply_router_weight_on_input,
                 shared_experts=shared_experts,
                 shared_experts_input=shared_experts_input,
@@ -1826,11 +2296,12 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                     topk_ids=topk_ids,
                     activation=layer.activation,
                     global_num_experts=layer.global_num_experts,
-                    expert_map=layer.expert_map,
+                    expert_map=plain_map,
                     apply_router_weight_on_input=layer.apply_router_weight_on_input,
                     shared_experts=shared_experts,
                     shared_experts_input=shared_experts_input,
                 )
+            hybrid_mode = cache.rot_map is not None
             _update_lru_expert_map_kernel[(1,)](
                 global_ids,
                 cache.cold_map,
@@ -1840,6 +2311,12 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                 cache.clock,
                 cache.miss_local_ids,
                 cache.miss_slots,
+                # Golden passes the shared 1-element dummy twice and
+                # HYBRID=False, which compiles the rot_map branches out of
+                # the kernel entirely (behaviour unchanged).
+                cache.rot_map if hybrid_mode else cache.lru_dummy,
+                cache.lru_dummy,
+                HYBRID=hybrid_mode,
                 num_ids=num_ids,
                 global_num_experts=cache.hot_map.numel(),
                 capacity=capacity,
@@ -1905,7 +2382,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
                     topk_ids=topk_ids,
                     activation=layer.activation,
                     global_num_experts=layer.global_num_experts,
-                    expert_map=layer.expert_map,
+                    expert_map=plain_map,
                     apply_router_weight_on_input=layer.apply_router_weight_on_input,
                     shared_experts=shared_experts,
                     shared_experts_input=shared_experts_input,
@@ -1976,7 +2453,7 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             topk_ids=topk_ids,
             activation=layer.activation,
             global_num_experts=layer.global_num_experts,
-            expert_map=cache.cold_map,
+            expert_map=plain_map if cache.rot_map is not None else cache.cold_map,
             apply_router_weight_on_input=layer.apply_router_weight_on_input,
             shared_experts=shared_experts,
             shared_experts_input=shared_experts_input,
