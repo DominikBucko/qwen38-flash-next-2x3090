@@ -84,7 +84,8 @@ class ServeFlagsTests(unittest.TestCase):
         env.pop("DISABLE_CUSTOM_ALL_REDUCE", None)
         env.pop("PYTORCH_CUDA_ALLOC_CONF", None)
         env.pop("VLLM_WNA16_STATIC_HOT_CACHE_SIZE", None)
-        for name in ("ENABLE_VISION", "VISION_MAX_IMAGES", "VISION_MAX_PIXELS"):
+        for name in ("ENABLE_VISION", "VISION_MAX_IMAGES", "VISION_MAX_PIXELS",
+                     "QWEN38_ASYNC_SCHEDULING", "JIT_CACHE_DIR"):
             env.pop(name, None)
         if value is not None:
             env["DISABLE_CUSTOM_ALL_REDUCE"] = value
@@ -212,6 +213,77 @@ class ServeFlagsTests(unittest.TestCase):
             self.assertEqual(argv[argv.index(flag) + 1], value)
         example = (ROOT / ".env.example").read_text()
         self.assertIn("\nVLLM_WNA16_STATIC_HOT_CACHE_SIZE=84\n", example)
+
+    def fast_profile(self) -> dict[str, str]:
+        values = {}
+        for line in (ROOT / "configs/fast-256k.env").read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                name, _, value = line.partition("=")
+                values[name] = value
+        return values
+
+    def test_async_scheduling_is_off_by_default(self) -> None:
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertIn("--no-async-scheduling", argv)
+        self.assertNotIn("--async-scheduling", argv)
+
+    def test_async_scheduling_is_opt_in(self) -> None:
+        result = self.run_launcher(settings={"QWEN38_ASYNC_SCHEDULING": "1"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertIn("--async-scheduling", argv)
+        self.assertNotIn("--no-async-scheduling", argv)
+
+    def test_invalid_async_scheduling_fails_before_exec(self) -> None:
+        result = self.run_launcher(settings={"QWEN38_ASYNC_SCHEDULING": "yes"})
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse(self.capture.exists())
+
+    def test_fast_profile_keeps_full_context_and_enables_fast_paths(self) -> None:
+        profile = self.fast_profile()
+        self.assertEqual(profile["QWEN38_STREAM_STAGE"], "1")
+        self.assertEqual(profile["QWEN38_PLE_PREFAULT"], "1")
+        self.assertEqual(profile["VLLM_MTP_DRAFT_VOCAB_RANGES"],
+                         "[[0,65536],[248044,248320]]")
+        settings = {k: v for k, v in profile.items() if k != "JIT_CACHE_DIR"}
+        result = self.run_launcher(settings=settings)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        captured = self.captured()
+        argv = captured["argv"]
+        self.assertIn("--async-scheduling", argv)
+        self.assertNotIn("--disable-custom-all-reduce", argv)
+        self.assertEqual(captured["env"]["PYTORCH_CUDA_ALLOC_CONF"], "expandable_segments:False")
+        self.assertEqual(captured["env"]["VLLM_WNA16_STATIC_HOT_CACHE_SIZE"], "84")
+        for flag, value in (("--max-model-len", "262144"),
+                            ("--kv-cache-memory-bytes", "4429185024"),
+                            ("--max-num-batched-tokens", "4096"),
+                            ("--kv-cache-dtype", "auto")):
+            self.assertEqual(argv[argv.index(flag) + 1], value)
+        self.assertEqual(json.loads(argv[argv.index("--speculative-config") + 1])[
+            "num_speculative_tokens"], 3)
+
+    def test_docker_launcher_forwards_fast_profile_and_jit_cache(self) -> None:
+        profile = self.fast_profile()
+        profile["JIT_CACHE_DIR"] = str(self.fixture / "jit-cache")
+        result = self.run_docker_launcher(profile)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        for name, value in profile.items():
+            if name != "JIT_CACHE_DIR":
+                self.assertIn(f"{name}={value}", argv)
+        cache = (self.fixture / "jit-cache").resolve()
+        self.assertIn(f"{cache}/humming:/root/.humming", argv)
+        self.assertIn(f"{cache}/triton:/root/.triton", argv)
+        self.assertTrue((cache / "humming").is_dir())
+
+    def test_docker_launcher_without_jit_cache_adds_no_mounts(self) -> None:
+        result = self.run_docker_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertFalse(any(":/root/.humming" in item for item in argv))
 
     def test_hot88_remains_an_explicit_override(self) -> None:
         result = self.run_launcher(hot_cache="88")

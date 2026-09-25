@@ -457,6 +457,9 @@ class PleOffloadConnector:
         if self.tp_rank == 0:
             self._request_queue.put_nowait(request)
 
+        if not getattr(self, "_qwen38_stale_ready_possible", True):
+            return
+        self._qwen38_stale_ready_possible = False
         deadline = time.monotonic() + envs.VLLM_PLE_OFFLOAD_READY_TIMEOUT
         for name, consumed_flag in self._cpu_output_consumed_flags.items():
             while int(consumed_flag.item()) != 0:
@@ -480,6 +483,7 @@ class PleOffloadConnector:
         """Locally satisfy PLE waits for dummy and capture forwards."""
         # Capture records the main-stream host wait and copy without executing
         # it. Leave consumed=1 so the first real CPU request can claim buffers.
+        self._qwen38_stale_ready_possible = True
         for name, buffer in self._cpu_output_buffers.items():
             buffer[:num_tokens].zero_()
             self._cpu_output_ready_flags[name].fill_(1)
