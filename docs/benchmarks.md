@@ -1,5 +1,19 @@
 # Benchmark evidence
 
+## September 25 fast 256K runtime
+
+The [September 25 report](../benchmarks/2026-09-25/README.md) measures the
+release image with the public benchmark client, three runs per shape:
+
+| Input + output tokens | First token | Input tok/s | Decode tok/s |
+|---|---:|---:|---:|
+| 131,072 + 2,048 | 47.6–48.7 s | 2,693–2,757 | 94.2–104.5 |
+| 260,096 + 2,048 | 98.0 s | 2,653–2,654 | 92.6–103.1 |
+
+Raw client reports with prompt and output hashes are
+[fast-131k.json.gz](../benchmarks/2026-09-25/fast-131k.json.gz) and
+[fast-260k.json.gz](../benchmarks/2026-09-25/fast-260k.json.gz).
+
 ## September 18 experimental long-context progress
 
 The latest candidate completed 260,096 input + 2,048 output tokens in 163.6

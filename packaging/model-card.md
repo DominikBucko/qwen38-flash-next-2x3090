@@ -42,6 +42,8 @@ The full 256K window (260,096 input tokens) reaches the first token in
 | 128K prompt | 131,072 + 2,048 | **47.6 s** | **2,752** | **104.5** |
 | Full 256K window | 260,096 + 2,048 | **98.0 s** | **2,654** | **103.1** |
 
+![Fast 256K runtime: time to first token and decode speed](https://raw.githubusercontent.com/DominikBucko/qwen38-flash-next-2x3090/main/docs/images/fast-256k-progress.svg)
+
 This is a **runtime release**: clone the GitHub repository and use its
 `configs/fast-256k.env` profile. The model weights on this page are unchanged.
 Large prefills now stream each layer's cold experts to the GPU ahead of time,
