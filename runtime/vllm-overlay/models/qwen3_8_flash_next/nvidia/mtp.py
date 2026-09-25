@@ -21,7 +21,8 @@ from torch import nn
 
 from vllm.compilation.decorators import support_torch_compile
 from vllm.config import VllmConfig, replace, set_current_vllm_config
-from vllm.distributed import get_pp_group
+from vllm.distributed import get_pp_group, tensor_model_parallel_all_gather
+import os as _q38_os
 from vllm.model_executor.layers.layernorm import GemmaRMSNorm
 from vllm.model_executor.layers.linear import ColumnParallelLinear
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
@@ -411,6 +412,16 @@ class Qwen3_8FlashNextMTP(nn.Module, SupportsPP, Qwen3_8FlashNextMixtureOfExpert
             self.lm_head = PPMissingLayer()
 
         self.logits_processor = LogitsProcessor(config.vocab_size)
+        from .draft_vocab import parse_ranges as _q38_parse_ranges
+        _q38_ranges = _q38_os.environ.get("VLLM_MTP_DRAFT_VOCAB_RANGES", "")
+        self._draft_vocab_ranges = (
+            _q38_parse_ranges(_q38_ranges, config.vocab_size) if _q38_ranges else None
+        )
+        if self._draft_vocab_ranges is not None:
+            spec = vllm_config.speculative_config
+            if (not spec.use_local_argmax_reduction
+                    or getattr(spec, "draft_sample_method", None) == "probabilistic"):
+                raise ValueError("reduced draft vocabulary requires greedy local argmax")
         self.make_empty_intermediate_tensors = (
             self.model.make_empty_intermediate_tensors
         )
@@ -447,6 +458,10 @@ class Qwen3_8FlashNextMTP(nn.Module, SupportsPP, Qwen3_8FlashNextMixtureOfExpert
         self, hidden_states: torch.Tensor, spec_step_idx: int = 0
     ) -> torch.Tensor:
         """Select greedy draft tokens without gathering the full vocabulary."""
+        if self._draft_vocab_ranges is not None:
+            from .draft_vocab import get_top_tokens as _q38_top
+            return _q38_top(self.logits_processor, self.lm_head, hidden_states,
+                            self._draft_vocab_ranges, tensor_model_parallel_all_gather)
         return self.logits_processor.get_top_tokens(self.lm_head, hidden_states)
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:

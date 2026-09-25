@@ -1,0 +1,182 @@
+{
+ "schema_version": 1,
+ "publication_date": "2026-09-25",
+ "measurement_period": "2026-09-25",
+ "status": "runtime_release_fast_256k_profile",
+ "hardware": {
+  "gpus": "2 x RTX 3090 24 GB",
+  "system_memory_gib": 128
+ },
+ "checkpoint": {
+  "repo": "albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE",
+  "canonical_tensor_revision": "ef554143369a706525336f6b42a09094835dc077"
+ },
+ "profile": "configs/fast-256k.env on top of configs/2x3090-128gb.env",
+ "configuration": {
+  "tensor_parallel": 2,
+  "expert_parallel": 2,
+  "hot_experts_per_rank": 84,
+  "target": "Intel W4A16 group128 unchanged",
+  "draft": "INT4 group32, draft vocabulary [0,65536)+[248044,248320)",
+  "mtp_depth": 3,
+  "experts_per_token": 10,
+  "max_model_len": 262144,
+  "max_num_seqs": 1,
+  "batch_tokens": 4096,
+  "kv_bytes_per_rank": 4429185024,
+  "kv_dtype": "BF16",
+  "ple_dtype": "FP8 E4M3FN",
+  "qsa": "approximate, unchanged selection budget",
+  "retention_interval": 1600,
+  "custom_all_reduce": true,
+  "expandable_segments": false,
+  "async_scheduling": true,
+  "streamed_prefill_staging": true,
+  "triton_skinny_gemm": true,
+  "ple_prefault": true
+ },
+ "protocol": {
+  "client": "scripts/benchmark_serving.py (repo-chat, fixed source-code corpus without tiling)",
+  "output_tokens": 2048,
+  "temperature": 0,
+  "ignore_eos": true,
+  "prefix_isolation": "unique cache_salt per request; model, expert caches, graphs and host pages remain warm",
+  "warmup": "one 4,096+256 request after startup; PLE prefault completed before the first measured request",
+  "ttft_definition": "request start to first SSE event containing output token IDs",
+  "input_rate_definition": "input_tokens / ttft_seconds; includes scheduling and first-token work",
+  "decode_definition": "tokens after first output chunk / time until final output chunk",
+  "validity": "complete SSE, exact usage and output counts, length finish"
+ },
+ "release_image_validation": {
+  "image_id": "sha256:a1ca0490ce27b1e9e6942aa51fd7110b57f38da0e4f439a74bc9b42f700c0d59",
+  "note": "built with docker/Dockerfile from this release tree; launched with scripts/docker_serve.sh",
+  "input_131072_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 48.672,
+     "input_tps": 2693.0,
+     "decode_tps": 102.03,
+     "request_seconds": 68.735,
+     "output_token_ids_sha256": "99c71e9b0e0f7658a6b9d0051bf962cee42a89c8bb72849525acc1e3bb60f6a5"
+    },
+    {
+     "ttft_seconds": 47.635,
+     "input_tps": 2751.6,
+     "decode_tps": 104.55,
+     "request_seconds": 67.214,
+     "output_token_ids_sha256": "b6a88635dc03e4e28aec9070b6d30b7c7972ab894d3247270b622b4cae8fa419"
+    },
+    {
+     "ttft_seconds": 47.547,
+     "input_tps": 2756.7,
+     "decode_tps": 94.16,
+     "request_seconds": 69.287,
+     "output_token_ids_sha256": "63cf9de555fb4e71b387b3231da2487f619a5920daa9ab72c7cca25282c722ea"
+    }
+   ],
+   "reciprocal_mean_decode_tps": 100.05,
+   "raw_report": "fast-131k.json.gz"
+  },
+  "input_260096_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 98.049,
+     "input_tps": 2652.7,
+     "decode_tps": 92.6,
+     "request_seconds": 120.154,
+     "output_token_ids_sha256": "be9b472e5ad58035e8e3dea6472ec309108324cf4bbcbf724103ce095d81bf91"
+    },
+    {
+     "ttft_seconds": 97.992,
+     "input_tps": 2654.3,
+     "decode_tps": 102.52,
+     "request_seconds": 117.959,
+     "output_token_ids_sha256": "04cd62273653bbed8cafa94ea427985e73b0cb516cdf0a3574427cabcadc86f5"
+    },
+    {
+     "ttft_seconds": 97.996,
+     "input_tps": 2654.1,
+     "decode_tps": 103.1,
+     "request_seconds": 117.852,
+     "output_token_ids_sha256": "a6a4033ed188f7313e3fdedf58cd5951684368d2fd68505bbdafe8ac12423b8a"
+    }
+   ],
+   "reciprocal_mean_decode_tps": 99.16,
+   "raw_report": "fast-260k.json.gz"
+  }
+ },
+ "headline": {
+  "input_tokens": 131072,
+  "output_tokens": 2048,
+  "ttft_seconds": 47.635,
+  "input_tps": 2751.6,
+  "decode_tps": 104.55,
+  "note": "one request (release run 2): best decode run; its prefill is within 0.2% of the best prefill run"
+ },
+ "full_context_development_runs": {
+  "note": "Earlier 260,096+2,048 runs on the development image with the same runtime files (external read-only PLE prefault instead of the built-in one).",
+  "quiet_host": [
+   {
+    "ttft_seconds": 98.0,
+    "input_tps": 2654.0,
+    "decode_tps": 100.59,
+    "mtp_acceptance": 0.636
+   },
+   {
+    "ttft_seconds": 98.125,
+    "input_tps": 2650.7,
+    "decode_tps": 102.85,
+    "mtp_acceptance": 0.562
+   }
+  ],
+  "host_under_memory_pressure": [
+   {
+    "ttft_seconds": 98.413,
+    "input_tps": 2642.9,
+    "decode_tps": 91.21,
+    "mtp_acceptance": 0.511
+   },
+   {
+    "ttft_seconds": 98.684,
+    "input_tps": 2635.6,
+    "decode_tps": 91.14,
+    "mtp_acceptance": 0.535
+   },
+   {
+    "ttft_seconds": 97.99,
+    "input_tps": 2654.3,
+    "decode_tps": 95.45,
+    "mtp_acceptance": 0.532
+   }
+  ],
+  "pressure_cause": "another job's download filled the page cache and pushed the GPU workers' host memory into swap"
+ },
+ "same_night_baseline": {
+  "image": "September 18 candidate (1,860/86.2 screen)",
+  "input_tokens": 260096,
+  "ttft_seconds": 146.971,
+  "input_tps": 1769.7,
+  "decode_tps": 82.58,
+  "mtp_acceptance": 0.541
+ },
+ "fresh_agent_screen": {
+  "suite": "LBX AgentBench v0.2 frozen harness, xhigh reasoning, 32 steps, 16,384 tokens/response, temperature 0",
+  "tasks": [
+   "DBG-06",
+   "LLM-01",
+   "OPS-02"
+  ],
+  "trajectories": 6,
+  "score_100": 6,
+  "strict_passes": 4,
+  "strict_misses": "pre-edit discovery gate only",
+  "normal_stops": 6,
+  "limits": "selected tasks, not the 15-task suite; no quality-parity claim"
+ },
+ "limits": [
+  "Decode depends on MTP acceptance (51-64% observed on this workload) and on host RAM headroom.",
+  "The whole 51.2 GB PLE table must stay resident; stop other memory-heavy jobs while serving.",
+  "Vision and two-client profiles were not re-validated on this runtime before publication.",
+  "Measurements are single requests; no confidence interval."
+ ]
+}

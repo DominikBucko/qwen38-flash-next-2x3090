@@ -28,42 +28,32 @@ Run **Qwen 3.8 Flash Next locally on two RTX 3090 24 GB GPUs and 128 GB RAM**.
 Start with the **[GitHub quickstart and pinned runtime](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it)**;
 the weights require its custom vLLM overlay.
 
-## New: full 256K context in 140 seconds
+## New: 2,752 tok/s prefill · 104.5 tok/s decode
 
-**1,860 tok/s prefill · 89.1 tok/s decode · 2× RTX 3090 + 128 GB RAM**
+**2× RTX 3090 + 128 GB RAM · fast 256K runtime (September 25)**
 
-Experimental peaks from separate requests: prefill at 260,096 input tokens;
-decode after 131,072 input tokens. Each generates 2,048 tokens.
+One request with 131,072 input tokens reaches the first token in **47.6 seconds**
+(**2,752 input tok/s**), then generates 2,048 tokens at **104.5 tok/s**.
+The full 256K window (260,096 input tokens) reaches the first token in
+**98.0 seconds** (**2,654 input tok/s**) and then decodes at up to **103.1 tok/s**.
 
-The latest experimental runtime reaches the first token in **139.8 seconds**
-with 260,096 input tokens, then generates 2,048 tokens at **86.2 tok/s**.
-That fills the native 262,144-token window. The full request takes 163.6 seconds.
-
-The wait fell from 214.5 to 139.8 seconds against the earlier screen at the same
-input length: **about 35% less waiting**, or 75 seconds saved. These are single
-screens with different preceding cache states, not a repeated one-change A/B.
-Input tok/s means input tokens / time to first token, including scheduling and
-first-token work; it is not kernel-only prefill.
-
-| Latest candidate | Input + output tokens | First token | Input tok/s | Decode tok/s |
+| Fast 256K profile | Input + output tokens | First token | Input tok/s | Decode tok/s |
 |---|---:|---:|---:|---:|
-| 128K prompt | 131,072 + 2,048 | **75.9 s** | **1,727** | **89.1** |
-| Full 256K window | 260,096 + 2,048 | **139.8 s** | **1,860** | **86.2** |
+| 128K prompt | 131,072 + 2,048 | **47.6 s** | **2,752** | **104.5** |
+| Full 256K window | 260,096 + 2,048 | **98.0 s** | **2,654** | **103.1** |
 
-![Experimental long-context prefill progress](docs/images/prefill-long-context.svg)
+This is a **runtime release**: clone the GitHub repository and use its
+`configs/fast-256k.env` profile. The model weights on this page are unchanged.
+Large prefills now stream each layer's cold experts to the GPU ahead of time,
+host-side stalls between decode steps are removed, and decode uses a P2P
+all-reduce, a skinny GEMM kernel and a smaller MTP draft vocabulary. The target
+still verifies every token. Target weights, BF16 KV, FP8 PLE, ten-expert routing
+and the approximate QSA budget are unchanged.
 
-The changes improve how large prefills read the GPU/host expert pool, warm
-uncommon kernel shapes before serving, and overlap part of the cold-expert
-transfer with compute. Target weights, BF16 KV, FP8 PLE, ten-expert routing and
-the approximate QSA budget are unchanged.
-
-One completed fresh-agent smoke on the **preceding candidate** measured
-**1,478 new-token/s prefill**, **79.4 tok/s decode** and **75% prefix reuse**
-over 13 requests. It passed that task; it is not a new 15-task suite score.
-
-**The new runtime changes are experimental, not in the default launcher or a
-published image yet.** This is a measurement update, not new model weights.
-See the [curves, data and test conditions](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-18/README.md).
+Decode depends on free RAM: the runtime keeps about 60 GB of expert weights and
+the 51.2 GB PLE table in system memory. With another job filling RAM, full-context
+decode was 91–95 tok/s. Input tok/s means input tokens / time to first token.
+See the [results, conditions and limits](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-25/README.md).
 
 ## Setup
 

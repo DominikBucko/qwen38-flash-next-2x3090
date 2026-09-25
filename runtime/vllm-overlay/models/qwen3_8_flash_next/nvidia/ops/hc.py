@@ -1,3 +1,5 @@
+import os as _q38_os
+_QWEN38_TRITON_SKINNY = _q38_os.environ.get("QWEN38_TRITON_SKINNY", "0") == "1"
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """NVIDIA HyperConnection kernels for Qwen3.8-Flash-Next."""
@@ -209,7 +211,12 @@ def _hc_project_gate_mix(
     assert chunk_tokens > 0
 
     if num_tokens <= chunk_tokens:
-        gate = F.linear(lora, weight)
+        if (num_tokens <= 8 and _QWEN38_TRITON_SKINNY and lora.dtype == torch.bfloat16
+                and weight.dtype == torch.bfloat16 and lora.is_contiguous() and weight.is_contiguous()):
+            from ..triton_skinny import skinny_mm
+            gate = skinny_mm(lora, weight)
+        else:
+            gate = F.linear(lora, weight)
         return _hc_gate_mix(x, gate, hc_count)
 
     hidden_size = hyper_hidden_size // hc_count

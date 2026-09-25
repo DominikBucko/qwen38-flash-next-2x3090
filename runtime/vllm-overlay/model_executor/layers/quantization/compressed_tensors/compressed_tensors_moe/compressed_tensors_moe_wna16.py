@@ -1628,6 +1628,8 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             self._dynamic_lru_enabled,
             global_ids,
         )
+        from .tiered_runtime import initialize
+        initialize(self, layer)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # Process weights using the shared oracle infrastructure
@@ -1999,3 +2001,13 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
     @property
     def supports_eplb(self) -> bool:
         return self.wna16_backend == WNA16MoEBackend.TRITON
+
+# Experimental integer LRU plus startup-only warmup. Keep the serial fallback.
+from .lru_map import update_kernel as _update_lru_expert_map_kernel
+from .lru_warmup import install as _install_lru_startup_warmup
+_install_lru_startup_warmup(CompressedTensorsWNA16MoEMethod)
+
+# Private experimental switch, off unless explicitly enabled before import.
+if os.environ.get("QWEN38_STAGE_OVERLAP", "0") == "1":
+    from .staging_runtime import install as _install_staging_overlap
+    _install_staging_overlap(CompressedTensorsWNA16MoEMethod)
