@@ -1,8 +1,8 @@
 # Qwen3.8-Flash-Next on 2× RTX 3090
 
-<h2 align="center">1,860 tok/s prefill · 89.1 tok/s decode</h2>
+<h2 align="center">2,752 tok/s prefill · 104.5 tok/s decode</h2>
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
-<p align="center">Experimental peaks from separate requests: prefill at 260,096 input tokens; decode after 131,072 input tokens. Each generates 2,048 tokens.</p>
+<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/fast-256k.env">fast 256K profile</a>. Full 256K window: 2,651 input tok/s and 100.6–102.8 tok/s decode.</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
@@ -13,38 +13,41 @@ The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE
 tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
 
-## New: full-context prefill in 140 seconds
+## New: fast 256K runtime
 
-The latest experimental build reads a 260,096-token prompt in **139.8 seconds**
-to first token, then generates 2,048 tokens at **86.2 tok/s**. That is
-**1,860 input tok/s**, counting the full wait to first token. The complete
-request takes 163.6 seconds.
+The September 25 runtime reads a **131,072-token prompt in 47.6 seconds** to
+first token (**2,752 input tok/s**), then generates 2,048 tokens at
+**104.5 tok/s**. Both numbers come from the same request on the release image.
 
-Compared with the earlier screen at the same input length, the wait fell from
-214.5 to 139.8 seconds: **about 35% less waiting**, or 75 seconds saved.
-These are single screens with different preceding cache states, not a repeated
-one-change A/B. Input tok/s here means input tokens divided by time to first
-token, not kernel-only prefill.
-
-| Latest candidate | Input + output tokens | First token | Input tok/s | Decode tok/s |
+| Fast 256K profile | Input + output tokens | First token | Input tok/s | Decode tok/s |
 |---|---:|---:|---:|---:|
-| 128K prompt | 131,072 + 2,048 | **75.9 s** | **1,727** | **89.1** |
-| Full 256K window | 260,096 + 2,048 | **139.8 s** | **1,860** | **86.2** |
+| 128K prompt, release image, best of 3 | 131,072 + 2,048 | **47.6 s** | **2,752** | **104.5** |
+| 128K prompt, release image, 3 runs | 131,072 + 2,048 | 47.6–48.7 s | 2,693–2,757 | 94.2–104.5 |
+| Full 256K window, quiet host | 260,096 + 2,048 | **98.0 s** | **2,651** | **100.6–102.8** |
 
-![Long-context prefill: earlier screen versus experimental candidates](docs/images/prefill-long-context.svg)
+Compared with the September 18 build on the same prompt, the full-window wait
+fell from 147.0 to 98.0 seconds, and decode rose from 82.6 to 100+ tok/s.
 
-The main change is how large prefills read the GPU/host expert pool. Further
-work warms uncommon kernel shapes before serving and overlaps part of the cold
-expert transfer with compute. The target weights, BF16 KV, FP8 PLE, ten-expert
-routing and approximate QSA budget stay unchanged.
+What changed:
 
-A completed fresh-agent smoke on the **preceding candidate** measured
-**1,478 new-token/s prefill** and **79.4 tok/s decode**, with **75% prefix reuse**
-across 13 requests. It passed that task; this is not a new 15-task suite score.
+- **Streamed prefill staging.** Each layer's cold experts are copied to the GPU
+  by DMA one or two layers ahead of large prefill chunks, then the unchanged
+  expert GEMM runs from VRAM.
+- **No host stalls between steps**, so async scheduling now overlaps input
+  preparation with GPU work.
+- **P2P all-reduce**, a **skinny GEMM kernel** for decode, and a **smaller MTP
+  draft vocabulary**. The target still verifies every token.
+- The whole **PLE table stays in RAM**, and kernel caches persist between starts.
 
-**These runtime changes are experimental and are not in the default launcher
-or a published image yet.** This update publishes the measurements, not a new
-runtime or checkpoint. See the [results, curves and test conditions](benchmarks/2026-09-18/README.md).
+Weights, BF16 KV, FP8 PLE, ten-expert routing and the approximate QSA budget
+are unchanged. Nothing is pruned.
+
+**Decode speed depends on free RAM.** The runtime keeps about 60 GB of expert
+weights and the 51.2 GB PLE table in system memory. With another job filling
+RAM, the same profile gave 91–95 tok/s at full context. See the
+[results, conditions and limits](benchmarks/2026-09-25/README.md).
+
+The previous build's measurements are in [September 18 results](benchmarks/2026-09-18/README.md).
 
 ## Historical results: 1,402 prefill · 135.2 warm decode
 
@@ -169,12 +172,21 @@ make serve
 
 The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
 
+For the fast 256K profile, append [`configs/fast-256k.env`](configs/fast-256k.env)
+to `.env` before `make serve`. It needs working bidirectional CUDA P2P between
+the two cards (see the [P2P check](docs/performance.md#cuda-p2p-and-custom-all-reduce)) and
+enough free RAM to keep the PLE table resident, so stop other memory-heavy jobs:
+
+```bash
+cat configs/fast-256k.env >> .env
+make serve
+```
+
 Image inputs are optional. See the [vision profile and request example](docs/vision.md).
 
 The default now caches 84 experts per layer to leave more room for prefill.
 Context stays at 256K and precision is unchanged. The original hillclimb results
-are historical; the new experimental results use additional, unreleased changes.
-Neither is a speed guarantee for this launcher. Set `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`
+are historical. None of the results is a speed guarantee for your host. Set `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`
 in `.env` to try the tighter profile. Existing `.env` files keep their old value.
 
 ### If it runs out of memory
@@ -213,6 +225,7 @@ upload commands.
 
 The small JSON summaries are public:
 
+- [September 25 fast 256K runtime results](benchmarks/2026-09-25/summary.json)
 - [September 18 experimental long-context and fresh-agent results](benchmarks/2026-09-18/summary.json)
 - [`benchmarks/serving-summary.json`](benchmarks/serving-summary.json)
 - [`benchmarks/hillclimb.json`](benchmarks/hillclimb.json)

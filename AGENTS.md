@@ -108,6 +108,76 @@ shapes intact; do not join the 135 tok/s repetitive-prompt peak to these agent
 or long-context points as one matched series. Public reports must omit private
 fixtures, traces, workstation names and GPU power-limit settings.
 
+## September 25 fast 256K runtime
+
+This release installs the runtime that was measured on September 25 as the
+overlay itself; `benchmarks/2026-09-25/` records the release-image validation.
+The overlay was taken from the tested image by diffing the installed vLLM
+package against the wheel RECORD: 47 files, byte-identical except the new
+opt-in PLE prefault in `v1/ple_offload/worker.py`. Keep that property: when a
+measured runtime changes, rebuild the overlay from the image that was measured.
+
+Always on now (all profiles): tiered prefill (one virtual expert tensor = GPU
+hot rows + immutable host source rows), the exact-size pinned expert backing
+(`VLLM_EXACT_PINNED_WEIGHTS=1`, C++ extension built in the Dockerfile), the
+integer LRU map with startup warmup of the real ten-expert shapes, and the
+specialized QSA prefill/tail kernels. These were developed and screened on the
+hot84 3090 profile in the September 17-18 campaign; hot80/vision/two-client use
+was only smoke-tested on the release image.
+
+Opt-in through `configs/fast-256k.env` (copy into `.env`):
+
+- `QWEN38_STREAM_STAGE=1`: prefill chunks of at least
+  `QWEN38_STREAM_STAGE_MIN_TOKENS` tokens copy each MoE layer's cold source rows
+  by DMA (copy engine) into a GPU slot one or two layers ahead and run the
+  original non-cached Humming schedule from VRAM. The two slots are VMM views
+  over the GPU hot pages of the last eight MoE layers; those layers stage all
+  256 rows by DMA, and their hot rows are rewritten from the immutable source
+  (fresh slot-id snapshot, one-time exact check) before the next step that can
+  read the hot cache. No VRAM is allocated for staging. Do not replace this with
+  dedicated slots: 1.26 GB/rank of slots forced hot72 and doubled decode miss
+  copies. The hot set only changes in target MoE calls with <=16 tokens, so the
+  snapshot is taken only after such a step (tracked in `execute_model`).
+- `QWEN38_ASYNC_SCHEDULING=1`: only useful after two host-stall fixes that are
+  now in the overlay. The PLE ShortConv metadata builder used pageable
+  `tensor.to(device)` copies, which stream-sync before copying; they are pinned
+  `async_tensor_h2d` copies now. The model thread no longer spins until the CPU
+  PLE worker claims its buffer after a real step (the GPU host-copy op always
+  writes ready=0 then consumed=1); the spin remains only after
+  `signal_dummy_outputs`. Decode host time per step fell from 23.7 to 2.6 ms.
+- `DISABLE_CUSTOM_ALL_REDUCE=0` with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False`:
+  about 2.5 ms less per decode cycle than NCCL LL. The collective time that
+  remains is mostly waiting for the rank with more expert misses.
+- `QWEN38_TRITON_SKINNY=1`: all 533 unquantized linears, the LM head and the HC
+  up projection use a Triton tensor-core kernel for M<=8 (M padded to 16, FP32
+  accumulation, deterministic split-K). Error versus an FP32 reference matched
+  cuBLAS on 78/78 shapes; isolated verify-step cost 7.9 -> 6.2 ms.
+- `VLLM_MTP_DRAFT_VOCAB_RANGES=[[0,65536],[248044,248320]]`: draft-only
+  restriction. Target verification is unchanged, so greedy output is unchanged.
+  About 1 ms per cycle at 260K; acceptance moved within noise.
+- `QWEN38_STAGE_OVERLAP=1`: the September 18 M4 down-projection copy overlap.
+- `QWEN38_PLE_PREFAULT=1`: after the GPU workers register, the CPU PLE worker
+  reads one byte per page of its tables in the background (stops at
+  `QWEN38_PLE_PREFAULT_RESERVE_GIB`, default 4). A table that is 20% in swap
+  costs about 2.4 ms per decode lookup.
+- `JIT_CACHE_DIR`: persistent Humming/Triton caches. Without them the first
+  long request can include kernel compiles (one 1,600-token chunk took 4.98 s
+  instead of ~1.25 s) and startup is about 70 s longer.
+
+Host RAM is the binding constraint on 128 GB: about 60.4 GB of pinned expert
+sources plus the 51.2 GB PLE table leave roughly 11 GB for five processes and the
+OS. On September 25 the same configuration measured 100.6 and 102.8 decode tok/s
+at 260,096+2,048 on a quiet host and 91-95 tok/s while another job's download
+filled the page cache and pushed the GPU workers into swap. Report host
+conditions with any decode claim. Moving the input embedding to host UVA works
+(`QWEN38_EMBED_UVA=1`, unadvertised) but costs 1.27 GB of host RAM; do not use it
+on 128 GB hosts.
+
+Rejected on September 25: dedicated staging slots (above); a larger KV pool to
+remove async prefill stalls (the stalls were first-use JIT compiles); predictive
+expert prefetch that applied each layer's router to its pre-attention input (most
+predictions missed, PCIe traffic doubled, SM contention, 70 tok/s).
+
 ## The model is large for a reason
 
 Calling the checkpoint “INT4” is incomplete. The target backbone uses Intel's
