@@ -35,6 +35,12 @@ case "$DISABLE_CUSTOM_ALL_REDUCE" in
     ;;
 esac
 
+case "${QWEN38_ASYNC_SCHEDULING:-0}" in
+  0) async_scheduling_arg=--no-async-scheduling ;;
+  1) async_scheduling_arg=--async-scheduling ;;
+  *) echo "QWEN38_ASYNC_SCHEDULING must be 0 or 1" >&2; exit 2 ;;
+esac
+
 allocator_config=${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}
 expandable_segments=
 IFS=',' read -r -a allocator_options <<< "$allocator_config"
@@ -99,7 +105,7 @@ exec vllm serve "$model" \
   --enable-chunked-prefill \
   --enable-prefix-caching \
   --mamba-cache-mode align \
-  --no-async-scheduling \
+  "$async_scheduling_arg" \
   ${custom_all_reduce_arg:+"$custom_all_reduce_arg"} \
   --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
   --trust-remote-code \

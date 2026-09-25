@@ -563,6 +563,7 @@ class QSAForwardMetadata(AttentionMetadata):
     num_mapped_tokens: int
     storage_block_size: int
     compress_ratio: int
+    max_query_len: int = 0
 
 
 class QSAMetadataBuilder(AttentionMetadataBuilder[QSAForwardMetadata]):
@@ -654,6 +655,7 @@ class QSAMetadataBuilder(AttentionMetadataBuilder[QSAForwardMetadata]):
             k_work_metadata=k_work_metadata,
             num_actual_tokens=num_tokens,
             num_mapped_tokens=int(common_attn_metadata.query_start_loc_cpu[-1]),
+            max_query_len=common_attn_metadata.max_query_len,
             storage_block_size=self.storage_block_size,
             compress_ratio=self.compress_ratio,
         )

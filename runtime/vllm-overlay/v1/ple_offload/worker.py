@@ -21,6 +21,7 @@ Class structure mirrors the GPU worker pattern in multiproc_executor.py:
 
 import contextlib
 import multiprocessing.process
+import os
 import pickle
 import signal
 import tempfile
@@ -304,6 +305,17 @@ class PleOffloadWorker:
             ready_writer.close()
             ready_writer = None  # type: ignore[assignment]
 
+            if os.environ.get("QWEN38_PLE_PREFAULT", "0") == "1":
+                # GPU workers register after their checkpoint load, which is
+                # what evicts this table to swap. Re-read it in the background
+                # while the engine finishes initialization.
+                threading.Thread(
+                    target=_prefault_tables,
+                    args=(runner, shutdown_event),
+                    daemon=True,
+                    name="PleOffloadPrefault",
+                ).start()
+
             runner.busy_loop(pull_socket, shutdown_event)
         except Exception as error:
             logger.exception("Unexpected failure in PLE offload worker.")
@@ -320,6 +332,48 @@ class PleOffloadWorker:
                 ready_writer.close()
             death_pipe.close()
 
+
+
+def _mem_available_bytes() -> int:
+    with open("/proc/meminfo") as meminfo:
+        for line in meminfo:
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
+    return 0
+
+
+def _prefault_tables(runner: "PleOffloadRunner", shutdown_event: threading.Event) -> None:
+    """Read one byte per page of the large host tables so decode lookups do not
+    fault them in from swap. Read-only; stops when free memory runs low."""
+    reserve = int(float(os.environ.get("QWEN38_PLE_PREFAULT_RESERVE_GIB", "4")) * 2**30)
+    chunk_bytes = 64 * 2**20
+    page = 4096
+    started = time.monotonic()
+    touched = 0
+    reason = "complete"
+    with torch.inference_mode():
+        for layer_name, layer in runner._layers.items():
+            for tensor in layer.state_dict().values():
+                if (not isinstance(tensor, torch.Tensor) or tensor.device.type != "cpu"
+                        or not tensor.is_contiguous()
+                        or tensor.numel() * tensor.element_size() < 2**30):
+                    continue
+                flat = tensor.reshape(-1).view(torch.uint8)
+                for offset in range(0, flat.numel(), chunk_bytes):
+                    if shutdown_event.is_set():
+                        reason = "shutdown"
+                        break
+                    if _mem_available_bytes() < reserve:
+                        reason = "memory reserve reached"
+                        break
+                    int(flat[offset:offset + chunk_bytes:page].sum())
+                    touched += min(chunk_bytes, flat.numel() - offset)
+                if reason != "complete":
+                    break
+            if reason != "complete":
+                break
+    logger.info("PLE prefault %s: %.1f GiB in %.1f s", reason, touched / 2**30,
+                time.monotonic() - started)
 
 class PleOffloadRunner:
     """Own all discovered PLE tables and serve every local DP rank."""

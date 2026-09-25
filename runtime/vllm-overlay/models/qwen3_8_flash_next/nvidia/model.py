@@ -612,6 +612,25 @@ class Qwen3_8FlashNextModel(nn.Module):
             weights,
             mapper=self.hf_to_vllm_mapper,
         )
+        import os as _os
+        embed = getattr(self, "embed_tokens", None)
+        weight = getattr(embed, "weight", None)
+        if (_os.environ.get("QWEN38_EMBED_UVA", "0") == "1" and weight is not None
+                and weight.is_cuda and not getattr(weight, "_vllm_is_uva_offloaded", False)):
+            from vllm.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+            from vllm.model_executor.offloader.exact_pinned import pin_cpu_tensor
+            cpu = pin_cpu_tensor(weight.data.to("cpu"))
+            view = get_accelerator_view_from_cpu_tensor(cpu)
+            if not torch.equal(view[:4096], weight.data[:4096]) or not torch.equal(view[-4096:], weight.data[-4096:]):
+                raise RuntimeError("embedding UVA copy mismatch")
+            nbytes = weight.numel() * weight.element_size()
+            weight.data = view
+            weight._vllm_is_uva_offloaded = True
+            self._qwen38_embed_host = cpu
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            from vllm.logger import init_logger as _init_logger
+            _init_logger(__name__).warning("Qwen3.8 input embedding moved to pinned host UVA: %d bytes", nbytes)
         return loaded
 
 
