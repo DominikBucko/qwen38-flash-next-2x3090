@@ -4,9 +4,9 @@
 tokens and 2,048 output tokens, on the release image built from this repository.
 It reached the first token in 47.6 seconds.
 
-**Full 256K window:** 260,096 input + 2,048 output tokens in about 98 seconds to
-first token (**2,651 input tok/s**), then **100.6–102.8 tok/s** decode on a quiet
-host.
+**Full 256K window:** 260,096 input + 2,048 output tokens reach the first token
+in 98.0 seconds (**2,654 input tok/s**) and then decode at up to **103.1 tok/s**,
+on the same release image.
 
 Hardware: two RTX 3090 24 GB cards and 128 GB system memory. This is a runtime
 release: use `configs/fast-256k.env` (see [Run it](../../README.md#run-it)).
@@ -24,16 +24,21 @@ Reciprocal-mean decode over the three runs: 100.0 tok/s. The raw report,
 [fast-131k.json.gz](fast-131k.json.gz), has exact token counts, prompt and
 output hashes and per-run timings.
 
-## Full context, 260,096 + 2,048
+## Release image, 260,096 + 2,048
 
-These runs used the development image with the same runtime files. The release
-differs only in how the PLE table is pre-read (built into the worker instead of
-an external read-only tool).
+| Run | First token | Input tok/s | Decode tok/s |
+|---|---:|---:|---:|
+| 1 | 98.0 s | 2,653 | 92.6 |
+| 2 | 98.0 s | 2,654 | 102.5 |
+| 3 | 98.0 s | 2,654 | **103.1** |
+
+Reciprocal-mean decode: 99.2 tok/s. Raw report: [fast-260k.json.gz](fast-260k.json.gz).
+
+Earlier runs on the development image with the same runtime files:
 
 | Host condition | First token | Input tok/s | Decode tok/s | MTP acceptance |
 |---|---:|---:|---:|---:|
-| Quiet host | 98.0 s | 2,654 | **100.6** | 63.6% |
-| Quiet host | 98.1 s | 2,651 | **102.8** | 56.2% |
+| Quiet host | 98.0–98.1 s | 2,651–2,654 | 100.6–102.8 | 56–64% |
 | Another job filling RAM | 98.0–98.7 s | 2,636–2,654 | 91.1–95.5 | 51–54% |
 
 Same-night baseline, the September 18 candidate: 147.0 s to first token

@@ -76,6 +76,33 @@
    ],
    "reciprocal_mean_decode_tps": 100.05,
    "raw_report": "fast-131k.json.gz"
+  },
+  "input_260096_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 98.049,
+     "input_tps": 2652.7,
+     "decode_tps": 92.6,
+     "request_seconds": 120.154,
+     "output_token_ids_sha256": "be9b472e5ad58035e8e3dea6472ec309108324cf4bbcbf724103ce095d81bf91"
+    },
+    {
+     "ttft_seconds": 97.992,
+     "input_tps": 2654.3,
+     "decode_tps": 102.52,
+     "request_seconds": 117.959,
+     "output_token_ids_sha256": "04cd62273653bbed8cafa94ea427985e73b0cb516cdf0a3574427cabcadc86f5"
+    },
+    {
+     "ttft_seconds": 97.996,
+     "input_tps": 2654.1,
+     "decode_tps": 103.1,
+     "request_seconds": 117.852,
+     "output_token_ids_sha256": "a6a4033ed188f7313e3fdedf58cd5951684368d2fd68505bbdafe8ac12423b8a"
+    }
+   ],
+   "reciprocal_mean_decode_tps": 99.16,
+   "raw_report": "fast-260k.json.gz"
   }
  },
  "headline": {
@@ -87,7 +114,7 @@
   "note": "one request (release run 2): best decode run; its prefill is within 0.2% of the best prefill run"
  },
  "full_context_development_runs": {
-  "note": "260,096+2,048 on the tested development image with the same runtime files (release differs only by the opt-in PLE prefault implementation; these runs used an external read-only prefault)",
+  "note": "Earlier 260,096+2,048 runs on the development image with the same runtime files (external read-only PLE prefault instead of the built-in one).",
   "quiet_host": [
    {
     "ttft_seconds": 98.0,
