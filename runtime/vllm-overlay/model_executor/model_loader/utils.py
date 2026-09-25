@@ -29,6 +29,7 @@ from vllm.tracing import instrument
 from vllm.utils.mem_utils import release_device_memory_under_pressure
 from vllm.utils.platform_utils import is_pin_memory_available
 from vllm.utils.torch_utils import get_accelerator_view_from_cpu_tensor
+from vllm.model_executor.offloader.exact_pinned import pin_cpu_tensor, report_exact_pinned_memory
 
 logger = init_logger(__name__)
 
@@ -167,6 +168,7 @@ def process_weights_after_loading(
     # @kylesayrs @jerryzh168 this can be removed if callers move to `reload_weights`
     if model_config.quantization == "torchao":
         set_torchao_reload_attrs(model, model_config)
+    report_exact_pinned_memory(target_device)
 
 
 @contextmanager
@@ -209,7 +211,7 @@ def device_loading_context(module: torch.nn.Module, target_device: torch.device)
             ):
                 cpu_data = p.data.to(device="cpu")
                 if use_pin_memory:
-                    cpu_data = cpu_data.pin_memory()
+                    cpu_data = pin_cpu_tensor(cpu_data)
                 p.data = get_accelerator_view_from_cpu_tensor(cpu_data)
                 p._vllm_is_uva_offloaded = True
 

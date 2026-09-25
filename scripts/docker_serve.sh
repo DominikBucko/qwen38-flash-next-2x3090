@@ -37,12 +37,32 @@ for name in \
   ENABLE_VISION \
   VISION_MAX_IMAGES \
   VISION_MAX_PIXELS \
-  MTP_DEPTH
+  MTP_DEPTH \
+  QWEN38_ASYNC_SCHEDULING \
+  QWEN38_STREAM_STAGE \
+  QWEN38_STREAM_STAGE_MIN_TOKENS \
+  QWEN38_STAGE_OVERLAP \
+  QWEN38_TRITON_SKINNY \
+  QWEN38_PLE_PREFAULT \
+  QWEN38_PLE_PREFAULT_RESERVE_GIB \
+  VLLM_MTP_DRAFT_VOCAB_RANGES
 do
   if declare -p "$name" &>/dev/null; then
     docker_env+=(-e "$name=${!name}")
   fi
 done
+
+# Optional persistent Humming/Triton JIT caches: avoids recompiling kernels on
+# every start and inside the first long request.
+cache_mounts=()
+if [[ -n "${JIT_CACHE_DIR:-}" ]]; then
+  mkdir -p "$JIT_CACHE_DIR/humming" "$JIT_CACHE_DIR/triton"
+  jit_cache_dir=$(cd -- "$JIT_CACHE_DIR" && pwd -P)
+  cache_mounts=(
+    -v "$jit_cache_dir/humming:/root/.humming"
+    -v "$jit_cache_dir/triton:/root/.triton"
+  )
+fi
 
 model_dir=$(cd -- "$model_dir" && pwd -P)
 [[ -f "$model_dir/model.safetensors.index.json" ]] || {
@@ -59,5 +79,6 @@ exec docker run --rm \
   --ulimit stack=67108864 \
   -p "127.0.0.1:$port:$port" \
   "${docker_env[@]}" \
+  ${cache_mounts[@]+"${cache_mounts[@]}"} \
   -v "$model_dir:/model:ro" \
   "$image" /model

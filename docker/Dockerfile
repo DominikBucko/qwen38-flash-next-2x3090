@@ -6,6 +6,11 @@ COPY runtime/install_overlay.py /opt/qwen38/runtime/install_overlay.py
 COPY runtime/vllm-overlay /opt/qwen38/runtime/vllm-overlay
 RUN python3 /opt/qwen38/runtime/install_overlay.py /opt/qwen38/runtime/vllm-overlay
 
+# Exact-size pinned expert backing (used by tiered prefill). Build its small
+# C++ host-allocator extension now so serving never compiles it at startup.
+ENV MAX_JOBS=1 VLLM_EXACT_PINNED_WEIGHTS=1
+RUN TORCH_CUDA_ARCH_LIST=8.6 python3 -c 'from vllm.model_executor.offloader.exact_pinned import extension; extension()'
+
 COPY configs/2x3090-128gb.env /opt/qwen38/configs/2x3090-128gb.env
 COPY configs/static_hot_cache_rankings.json /workspace/static_hot_cache_rankings.json
 COPY scripts/serve-container.sh /usr/local/bin/qwen38-serve
