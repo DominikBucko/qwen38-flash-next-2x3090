@@ -75,9 +75,11 @@ Input/TTFT rates are 1,726.935 and 1,860.207 tok/s. They include scheduling and
 first-token work. The earlier full-context screen took 214.487 s: a 34.8%
 observed wait reduction, not an isolated causal gain. Preceding cache state
 differs and each point is one request. Preserve this qualification near claims.
-The README and HF headline pair the best input/TTFT rate (1,860 at 260,096 input)
-with the best decode rate (89.1 after 131,072 input). They are separate requests,
-both with 2,048 output tokens; keep that distinction immediately below the headline.
+The September 18 README and HF headline paired the best input/TTFT rate (1,860
+at 260,096 input) with the best decode rate (89.1 after 131,072 input) from
+separate requests. Since September 25 the headline is one release-image request
+(131,072+2,048: 2,752 input tok/s, 104.5 decode); keep its shape and the
+full-context result immediately below the headline.
 
 The most useful engineering change was the large-prefill expert view: hot GPU
 pages plus an immutable host suffix under one contiguous logical tensor. Keep

@@ -29,6 +29,8 @@ first token (**2,752 input tok/s**), then generates 2,048 tokens at
 Compared with the September 18 build on the same prompt, the full-window wait
 fell from 147.0 to 98.0 seconds, and decode rose from 82.6 to 100+ tok/s.
 
+![Fast 256K runtime: time to first token and decode speed](docs/images/fast-256k-progress.svg)
+
 What changed:
 
 - **Streamed prefill staging.** Each layer's cold experts are copied to the GPU
