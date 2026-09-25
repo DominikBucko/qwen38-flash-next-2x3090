@@ -2,7 +2,7 @@
 
 <h2 align="center">2,752 tok/s prefill · 104.5 tok/s decode</h2>
 <p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
-<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/fast-256k.env">fast 256K profile</a>. Full 256K window: 2,651 input tok/s and 100.6–102.8 tok/s decode.</p>
+<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/fast-256k.env">fast 256K profile</a>. Full 256K window: 2,654 input tok/s and up to 103.1 tok/s decode.</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
@@ -23,7 +23,8 @@ first token (**2,752 input tok/s**), then generates 2,048 tokens at
 |---|---:|---:|---:|---:|
 | 128K prompt, release image, best of 3 | 131,072 + 2,048 | **47.6 s** | **2,752** | **104.5** |
 | 128K prompt, release image, 3 runs | 131,072 + 2,048 | 47.6–48.7 s | 2,693–2,757 | 94.2–104.5 |
-| Full 256K window, quiet host | 260,096 + 2,048 | **98.0 s** | **2,651** | **100.6–102.8** |
+| Full 256K window, release image, best of 3 | 260,096 + 2,048 | **98.0 s** | **2,654** | **103.1** |
+| Full 256K window, release image, 3 runs | 260,096 + 2,048 | 98.0 s | 2,653–2,654 | 92.6–103.1 |
 
 Compared with the September 18 build on the same prompt, the full-window wait
 fell from 147.0 to 98.0 seconds, and decode rose from 82.6 to 100+ tok/s.

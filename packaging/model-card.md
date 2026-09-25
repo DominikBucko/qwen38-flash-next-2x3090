@@ -34,14 +34,13 @@ the weights require its custom vLLM overlay.
 
 One request with 131,072 input tokens reaches the first token in **47.6 seconds**
 (**2,752 input tok/s**), then generates 2,048 tokens at **104.5 tok/s**.
-The full 256K window (260,096 input tokens) reaches the first token in about
-**98 seconds** (**2,651 input tok/s**) and then decodes at **100.6–102.8 tok/s**
-on a quiet host.
+The full 256K window (260,096 input tokens) reaches the first token in
+**98.0 seconds** (**2,654 input tok/s**) and then decodes at up to **103.1 tok/s**.
 
 | Fast 256K profile | Input + output tokens | First token | Input tok/s | Decode tok/s |
 |---|---:|---:|---:|---:|
 | 128K prompt | 131,072 + 2,048 | **47.6 s** | **2,752** | **104.5** |
-| Full 256K window | 260,096 + 2,048 | **98.0 s** | **2,651** | **100.6–102.8** |
+| Full 256K window | 260,096 + 2,048 | **98.0 s** | **2,654** | **103.1** |
 
 This is a **runtime release**: clone the GitHub repository and use its
 `configs/fast-256k.env` profile. The model weights on this page are unchanged.
