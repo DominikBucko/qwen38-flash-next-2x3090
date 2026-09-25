@@ -1,9 +1,33 @@
 # Qwen3.8 Flash Next performance tuning on two 24 GB GPUs
 
-New experimental results: **139.8 seconds to first token and 86.2 tok/s decode
-at a full 256K window**. See the [September 18 curves and conditions](../benchmarks/2026-09-18/README.md).
-Those runtime changes are not in the default launcher yet; the setup below
-still describes the public profile.
+New: the **fast 256K profile** reaches the first token of a full 256K window in
+**98.0 seconds** (2,654 input tok/s) and decodes at up to **103.1 tok/s**; a
+131,072-token prompt takes 47.6 seconds at 104.5 tok/s decode. See the
+[September 25 results and conditions](../benchmarks/2026-09-25/README.md).
+
+## Fast 256K profile
+
+Append [`configs/fast-256k.env`](../configs/fast-256k.env) to `.env`. It keeps
+the default hot84, BF16 KV, 262,144-token single-request shape and adds:
+
+| Setting | What it does |
+|---|---|
+| `QWEN38_STREAM_STAGE=1`, `QWEN38_STREAM_STAGE_MIN_TOKENS=1536` | Large prefill chunks copy each layer's cold experts to the GPU by DMA one or two layers ahead, then run the unchanged expert GEMM from VRAM. Copy buffers reuse hot-cache pages. |
+| `QWEN38_ASYNC_SCHEDULING=1` | Overlaps host input preparation with GPU work. |
+| `DISABLE_CUSTOM_ALL_REDUCE=0`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False` | P2P all-reduce for decode collectives. Needs working bidirectional CUDA P2P (see below). |
+| `QWEN38_TRITON_SKINNY=1` | Tensor-core kernel for decode-sized dense projections and the LM head. |
+| `VLLM_MTP_DRAFT_VOCAB_RANGES=[[0,65536],[248044,248320]]` | Smaller vocabulary for MTP proposals only; the target verifies every token. |
+| `QWEN38_STAGE_OVERLAP=1` | Overlaps decode down-projection expert copies with the gate/up GEMM. |
+| `QWEN38_PLE_PREFAULT=1` | Reads the 51.2 GB PLE table back into RAM after loading. It finishes a few minutes after the server is ready. |
+| `JIT_CACHE_DIR=./jit-cache` | Keeps compiled kernels between starts. |
+
+**Free RAM matters.** The profile keeps about 60 GB of expert weights and the
+51.2 GB PLE table in system memory. Stop other memory-heavy jobs; when another
+job filled RAM, full-context decode fell from about 101 to 91–95 tok/s. Wait for
+`PLE prefault complete` in the server log before timing requests.
+
+All profiles now use tiered prefill and exact-size pinned expert backing. The
+vision and two-client profiles were not re-measured on this runtime yet.
 
 ## Start with the released profile
 
