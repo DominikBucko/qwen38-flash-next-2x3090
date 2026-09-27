@@ -73,6 +73,24 @@ xhigh reasoning, 16,384 tokens per response: all six scored 100 and ended with
 a normal stop. Four were strict passes; the other two missed only the pre-edit
 discovery gate. This is a selected-task check, not the 15-task suite.
 
+## Environment
+
+[environment.json](environment.json) records the exact launch settings of these
+runs: profile environment, the resulting vLLM arguments, the container command,
+image IDs, and the host (CPU, memory, OS and kernel, NVIDIA driver, CUDA, PCIe and
+P2P status). Two points matter most when reproducing:
+
+- **CUDA P2P.** The profile enables the custom P2P all-reduce. On these RTX 3090s
+  PCIe peer access came from a locally built NVIDIA open kernel module (595.84)
+  with a peer-to-peer patch ported from `aikitoria/open-gpu-kernel-modules`;
+  stock GeForce drivers do not expose it. Without P2P, keep
+  `DISABLE_CUSTOM_ALL_REDUCE=1` (about 2.5 ms slower per decode cycle).
+- **Host memory.** Other memory-heavy jobs were stopped and each run started after
+  `PLE prefault complete`.
+
+A prebuilt image of this runtime is published to GHCR for each release; see
+[docs/reproduce.md](../../docs/reproduce.md#prebuilt-image).
+
 ## Limits
 
 - Single requests; no confidence interval. Decode varies with MTP acceptance

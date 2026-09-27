@@ -107,6 +107,29 @@ make preflight
 make serve
 ```
 
+### Prebuilt image
+
+Each release from v0.3.0 on is also published to GHCR by
+`.github/workflows/publish-image.yml`, built from the release tag with the same
+`docker/Dockerfile`. The model weights are not in the image. Pull by digest,
+not by tag; the digest for each release is in its release notes and the
+workflow run summary:
+
+```bash
+docker pull ghcr.io/dominikbucko/qwen38-flash-next-2x3090:v0.3.0
+IMAGE=ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:<digest from the release notes> make serve
+```
+
+The image carries OCI labels for its source commit
+(`org.opencontainers.image.revision`) and base image
+(`org.opencontainers.image.base.name`), and a signed build-provenance
+attestation you can check with
+`gh attestation verify oci://ghcr.io/dominikbucko/qwen38-flash-next-2x3090:v0.3.0 --owner DominikBucko`.
+It is rebuilt in CI, so it is not byte-identical to the local image the
+September 25 numbers were measured on; the build inputs are. That run's exact
+settings, host and driver are in
+[`benchmarks/2026-09-25/environment.json`](../benchmarks/2026-09-25/environment.json).
+
 Equivalent Compose launch:
 
 ```bash
