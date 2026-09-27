@@ -175,6 +175,11 @@ make serve
 
 The OpenAI-compatible endpoint is `http://127.0.0.1:8000/v1`.
 
+To skip the local build, pull the published release image (weights stay a
+separate download) and pin it by the digest from the release notes:
+`IMAGE=ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:<digest> make serve`.
+See [Prebuilt image](docs/reproduce.md#prebuilt-image).
+
 For the fast 256K profile, append [`configs/fast-256k.env`](configs/fast-256k.env)
 to `.env` before `make serve`. It needs working bidirectional CUDA P2P between
 the two cards (see the [P2P check](docs/performance.md#cuda-p2p-and-custom-all-reduce)) and

@@ -180,6 +180,16 @@ remove async prefill stalls (the stalls were first-use JIT compiles); predictive
 expert prefetch that applied each layer's router to its pre-attention input (most
 predictions missed, PCIe traffic doubled, SM contention, 70 tok/s).
 
+## Published runtime images
+
+From v0.3.0 on, `.github/workflows/publish-image.yml` builds `docker/Dockerfile`
+at each release tag and pushes it to `ghcr.io/dominikbucko/qwen38-flash-next-2x3090`
+(tags `vX.Y.Z` and `sha-<commit>`, OCI labels for the revision and base image, and a
+build-provenance attestation). Record the resulting digest in the release notes.
+These CI images are rebuilt, not the exact local images that produced benchmark
+numbers; each benchmark directory keeps its own `environment.json` with the local
+image ID. Experimental campaign images remain audit IDs, not pullable images.
+
 ## The model is large for a reason
 
 Calling the checkpoint “INT4” is incomplete. The target backbone uses Intel's
