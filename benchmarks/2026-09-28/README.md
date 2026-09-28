@@ -87,8 +87,17 @@ emulation drove the real block pool and Mamba manager with one step always in
 flight, and checked that no block was freed while a step still read it. Peak
 live blocks per Mamba group fell from 35 to 6 at 131K, and from 67 to 6 at 260K.
 
-Freed state blocks stay in the prefix cache until they are evicted, so prefix
-reuse is unchanged.
+Freed state blocks stay in the prefix cache until they are evicted. The
+repository's cache checklist gave the same result on both images. The prompt
+had 32,794 tokens and each request generated 256.
+
+| Request | Release image | With the fix |
+|---|---:|---:|
+| Same prefix again: cached tokens, time | 28,800, 5.32 s | 28,800, 5.28 s |
+| Next turn: cached tokens, time | 30,400, 4.39 s | 30,400, 4.36 s |
+| First request / no-cache control | 15.80 / 14.30 s | 15.91 / 14.38 s |
+
+On both images the cached rerun matched the first run for 32 greedy tokens.
 
 ## Sizing note
 

@@ -257,5 +257,78 @@
    ],
    "kv_preemptions": 0
   }
+ },
+ "prefix_reuse_check": {
+  "protocol": "32,794-token repo-chat prompt, 256 greedy tokens: first, same prefix again, next turn (prefix + reply + question), no-cache control; 256K profile, hot84",
+  "release_image": {
+   "first": {
+    "prompt_tokens": 32794,
+    "seconds": 15.8,
+    "hits": 0,
+    "queries": 32794,
+    "preemptions": 0
+   },
+   "same_prefix_again": {
+    "prompt_tokens": 32794,
+    "seconds": 5.32,
+    "hits": 28800,
+    "queries": 32794,
+    "preemptions": 0
+   },
+   "multi_turn": {
+    "prompt_tokens": 33072,
+    "seconds": 4.39,
+    "hits": 30400,
+    "queries": 33072,
+    "preemptions": 0
+   },
+   "no_cache_control": {
+    "prompt_tokens": 32794,
+    "seconds": 14.3,
+    "hits": 0,
+    "queries": 32794,
+    "preemptions": 0
+   }
+  },
+  "with_fix": {
+   "first": {
+    "prompt_tokens": 32794,
+    "seconds": 15.91,
+    "hits": 0,
+    "queries": 32794,
+    "preemptions": 0
+   },
+   "same_prefix_again": {
+    "prompt_tokens": 32794,
+    "seconds": 5.28,
+    "hits": 28800,
+    "queries": 32794,
+    "preemptions": 0
+   },
+   "multi_turn": {
+    "prompt_tokens": 33072,
+    "seconds": 4.36,
+    "hits": 30400,
+    "queries": 33072,
+    "preemptions": 0
+   },
+   "no_cache_control": {
+    "prompt_tokens": 32794,
+    "seconds": 14.38,
+    "hits": 0,
+    "queries": 32794,
+    "preemptions": 0
+   }
+  },
+  "greedy_agreement_tokens_of_256": {
+   "release_image": {
+    "cached_vs_first": 32,
+    "control_vs_first": 94
+   },
+   "with_fix": {
+    "cached_vs_first": 32,
+    "control_vs_first": 61
+   }
+  }
  }
 }
