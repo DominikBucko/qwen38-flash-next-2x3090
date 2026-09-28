@@ -192,5 +192,70 @@
   "mamba_groups": 4,
   "state_blocks_per_group_prefill_async": 6,
   "static_assumption": 5
+ },
+ "release_image_validation": {
+  "image_id": "sha256:25a3ae9c6803687247c4441804597d090b5c31ff2f05c3068114b2655f9e207a",
+  "note": "built with docker/Dockerfile from this tree; launched with scripts/docker_serve.sh; fast 256K profile",
+  "measured_runs_per_shape": 3,
+  "decode_cost_per_verify_cycle_ms": {
+   "131k": 26.39,
+   "260k": 27.51
+  },
+  "tokens_per_verify_cycle": {
+   "131k": 2.621,
+   "260k": 2.642
+  },
+  "input_131072_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 45.953,
+     "input_tps": 2852.3,
+     "decode_tps": 99.26,
+     "request_seconds": 66.577,
+     "output_token_ids_sha256": "34d91ecbd2be6c9dbc54db545872c396622195cddb3c7e3989cb3c400decfd4e"
+    },
+    {
+     "ttft_seconds": 44.951,
+     "input_tps": 2915.9,
+     "decode_tps": 101.94,
+     "request_seconds": 65.031,
+     "output_token_ids_sha256": "312c18b474c59ad61376122dc32a5271507a83e67b3c0858d9cc1399dcdab0aa"
+    },
+    {
+     "ttft_seconds": 44.963,
+     "input_tps": 2915.1,
+     "decode_tps": 98.88,
+     "request_seconds": 65.665,
+     "output_token_ids_sha256": "c8a0b2aaae695e954b0f8c67c9b48971d84e990ee6fce5ff4397e45d34fc3d08"
+    }
+   ],
+   "kv_preemptions": 0
+  },
+  "input_260096_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 90.793,
+     "input_tps": 2864.7,
+     "decode_tps": 94.04,
+     "request_seconds": 112.562,
+     "output_token_ids_sha256": "5dfe1b8604db96af28580df8de0d179b543b2aae85e259907a3cc58338267a48"
+    },
+    {
+     "ttft_seconds": 90.781,
+     "input_tps": 2865.1,
+     "decode_tps": 97.47,
+     "request_seconds": 111.782,
+     "output_token_ids_sha256": "673e18838796ae6800883deb622841648e3b7ad65cdba2f5d5696740eff383f2"
+    },
+    {
+     "ttft_seconds": 90.811,
+     "input_tps": 2864.1,
+     "decode_tps": 98.29,
+     "request_seconds": 111.638,
+     "output_token_ids_sha256": "8245d5310cce85f2aa89865825a4109ff67a9deb345245f494c8a3ea699b5885"
+    }
+   ],
+   "kv_preemptions": 0
+  }
  }
 }

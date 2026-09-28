@@ -32,10 +32,28 @@ shapes was 98.6 tok/s with the fix and 99.1 tok/s without it.
 A 256K retrieval check on the fixed image passed 5/5: 255,645-token prompts,
 needle depths from 5% to 95%, thinking off. Each took 90.0 s.
 
-Raw reports: [fix-260k](fix-260k.json.gz), [fix-131k](fix-131k.json.gz),
-[fix-8k](fix-8k.json.gz), [base-260k](base-260k.json.gz),
-[base-131k](base-131k.json.gz) and [base-8k](base-8k.json.gz).
-[summary.json](summary.json) has the per-run numbers.
+## Release image, three runs
+
+This image was built with `docker/Dockerfile` from this tree and launched with
+`scripts/docker_serve.sh` on the fast 256K profile. Its runtime files are
+byte-identical to the fixed image in the A/B.
+
+| Shape | First token | Input tok/s | Decode tok/s | September 25 release |
+|---|---:|---:|---:|---|
+| 131,072 + 2,048 | 45.0–46.0 s | 2,852–**2,916** | 98.9–101.9 | 47.6–48.7 s, 2,693–2,757 |
+| 260,096 + 2,048 | **90.8 s** (all three) | 2,864–**2,865** | 94.0–98.3 | 98.0 s, 2,653–2,654 |
+
+There were no preemptions. Decode stayed within the September 25 range (94.2–104.5 at 131K, 92.6–103.1
+at 260K). A verify cycle cost 26.39 ms at 131K and 27.51 ms at 260K, matching
+the release image on the same night. Acceptance was 2.62–2.64 tokens per cycle
+on these runs.
+
+Raw reports: [validation-131k](validation-131k.json.gz),
+[validation-260k](validation-260k.json.gz), [fix-260k](fix-260k.json.gz),
+[fix-131k](fix-131k.json.gz), [fix-8k](fix-8k.json.gz),
+[base-260k](base-260k.json.gz), [base-131k](base-131k.json.gz) and
+[base-8k](base-8k.json.gz). [summary.json](summary.json) has the per-run
+numbers.
 
 ## What was wrong
 
