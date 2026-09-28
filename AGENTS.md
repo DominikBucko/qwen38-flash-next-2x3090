@@ -183,6 +183,29 @@ remove async prefill stalls (the stalls were first-use JIT compiles); predictive
 expert prefetch that applied each layer's router to its pre-attention input (most
 predictions missed, PCIe traffic doubled, SM contention, 70 tok/s).
 
+## September 29 agent 128K profile
+
+`configs/agent-128k.env` is the fast 256K profile with half the context:
+`MAX_MODEL_LEN=135168`, `KV_CACHE_MEMORY_BYTES=2500000000` (110 blocks) and
+hot100. Decode is expert-miss bound. The miss copies and the gather were about
+10 of the 29 ms in a 260K verify cycle. Spending the freed KV memory on hot
+experts is therefore worth more than any kernel change measured on September 28.
+Results (`benchmarks/2026-09-29/`):
+- verify cycle 30.2–30.3 → 27.4 ms on the 7-prompt set (104–105 → 116.1 tok/s),
+  with unchanged acceptance;
+- 131K + 2K: 43.3–44.1 s to first token (2,974–3,029 tok/s), 108.5–109.8 tok/s
+  decode;
+- zero preemptions.
+
+Hot sets above 96 need the widened geometry checks in `lru_warmup.py`,
+`tiered_runtime.py` and `staging_runtime.py` (64–128). With the old 64–96 range,
+startup stops with an "unchecked ... geometry" error. Keep the
+110-block pool: 85 attention blocks, the QSA ring, and 4 Mamba groups × 6 async
+prefill blocks. With 106 blocks, which vLLM reports as exactly 1.00x, a 131K
+request is preempted near the end of prefill. INT8 dense weights would free
+enough VRAM for hot96 at 256K. They were rejected on September 27 because the
+token-agreement gate measured +0.010 nats/token (not lossless).
+
 ## Published runtime images
 
 From v0.3.0 on, `.github/workflows/publish-image.yml` builds `docker/Dockerfile`

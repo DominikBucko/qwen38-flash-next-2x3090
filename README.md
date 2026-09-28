@@ -190,6 +190,11 @@ cat configs/fast-256k.env >> .env
 make serve
 ```
 
+For agent work that stays under 128K, use [`configs/agent-128k.env`](configs/agent-128k.env)
+instead. It has the same requirements. The context is 135,168 tokens, and the
+KV memory this frees holds 16 more hot experts per GPU: about 110 tok/s decode
+and 3,000 input tok/s on a 131,072-token prompt ([results](benchmarks/2026-09-29/README.md)).
+
 Image inputs are optional. See the [vision profile and request example](docs/vision.md).
 
 The default now caches 84 experts per layer to leave more room for prefill.
