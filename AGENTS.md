@@ -118,6 +118,9 @@ The overlay was taken from the tested image by diffing the installed vLLM
 package against the wheel RECORD: 47 files, byte-identical except the new
 opt-in PLE prefault in `v1/ple_offload/worker.py`. Keep that property: when a
 measured runtime changes, rebuild the overlay from the image that was measured.
+The September 28 Mamba state-block fix added a 48th file,
+`v1/core/single_type_kv_cache_manager.py`, measured on the release image with
+only that file replaced.
 
 Always on now (all profiles): tiered prefill (one virtual expert tensor = GPU
 hot rows + immutable host source rows), the exact-size pinned expert backing
@@ -559,6 +562,26 @@ cache changes:
    string;
 6. measure both latency saved and host/GPU state retained.
 
+Mamba state blocks must be released on the processed-token basis. The base
+image frees KV blocks only below the tokens whose steps have completed, because
+an in-flight step may still read them. Its align-mode Mamba manager, however,
+tracked a single pending state block per request. With async scheduling a step
+is always in flight, so each prefill chunk replaced the pending entry before it
+could be freed. The generic sweep stops at the first null entry and never
+reached the orphan. The result was one leaked block per chunk in each of the
+four Mamba groups: a 260K request filled the pool about five times and was
+preempted each time. `runtime/vllm-overlay/v1/core/single_type_kv_cache_manager.py`
+frees every state block below the latest completed step (September 28: +7.5–8.2%
+prefill at 260K, +6% at 131K, zero preemptions; `benchmarks/2026-09-28/`). Watch
+`vllm:num_preemptions_total` in any long-context measurement. A single request
+should never be preempted.
+
+Under async scheduling a prefill step legitimately holds 3 + num_speculative
+state blocks per Mamba group. The completed step, the in-flight step and the new
+step each hold one, and the speculative blocks hold the rest. vLLM's static
+estimate assumes 2 + num_speculative. A pool sized to exactly 1.00x reported
+concurrency therefore needs four more blocks to hold a maximum-length request.
+
 Agent-harness token accounting is not an isolated prefill benchmark. Tool turns,
 prefix hits, repeated context, non-streaming time, and generation all mix
 together. Use isolated requests for pp/tg claims and the harness only for
@@ -839,6 +862,17 @@ The full-context check was text-only, after the image probes; it was not a cold
 request or a full-context multimodal check. See `docs/vision.md` for setup and
 `benchmarks/2026-09-16/vision.json` for evidence and limits.
 
+### Long prompts are slower than their length predicts
+
+Compare `vllm:num_preemptions_total` before and after the request. With
+`MAX_NUM_SEQS=1` it should not move. If it does, log the live blocks per KV
+cache group at each scheduler step. Before the September 28 fix, the Mamba
+groups grew by one block per prefill chunk until the pool filled. Each
+preemption resets the computed tokens and re-admits the request from its own
+prefix cache, so the output stays correct but the prefill runs slower. Also
+check that the KV pool has room for the async-scheduling state blocks (see
+"Prefix caching was an architectural fix").
+
 ### Prefix caching reports hits but output changes
 
 Suspect hybrid state. Inspect Mamba-aligned splitting, QSA compressor state,
@@ -905,6 +939,7 @@ These are experiments, not promised wins:
 | Hybrid QSA cache | `runtime/vllm-overlay/models/qwen3_8_flash_next/common/qsa_cache.py` |
 | MTP model integration | `runtime/vllm-overlay/models/qwen3_8_flash_next/nvidia/mtp.py` |
 | Scheduler and prefix alignment | `runtime/vllm-overlay/v1/core/sched/scheduler.py` |
+| Mamba state-block lifetime | `runtime/vllm-overlay/v1/core/single_type_kv_cache_manager.py` |
 | Reproducible build | `docs/reproduce.md` |
 
 The central lesson is that this result did not come from one fast kernel. It

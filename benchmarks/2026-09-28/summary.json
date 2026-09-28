@@ -1,0 +1,196 @@
+{
+ "schema_version": 1,
+ "publication_date": "2026-09-28",
+ "measurement_period": "2026-09-28",
+ "status": "runtime_fix_mamba_state_block_leak",
+ "hardware": {
+  "gpus": "2 x RTX 3090 24 GB",
+  "system_memory_gib": 128
+ },
+ "checkpoint": {
+  "repo": "albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE",
+  "canonical_tensor_revision": "ef554143369a706525336f6b42a09094835dc077"
+ },
+ "profile": "configs/fast-256k.env on top of configs/2x3090-128gb.env (unchanged)",
+ "change": "runtime/vllm-overlay/v1/core/single_type_kv_cache_manager.py: align-mode Mamba manager frees every state block below the latest completed step",
+ "protocol": {
+  "client": "benchmark_frozen_repo.py (repo-chat), same as benchmarks/2026-09-25",
+  "measured_runs_per_shape": 2,
+  "order": "260,096+2,048 then 131,072+2,048 then 8,192+2,048 on one server per image",
+  "warmup": "one 4,096+256 request after startup; PLE prefault completed first",
+  "prefix_isolation": "unique cache_salt per request",
+  "same_night": true,
+  "preemptions": "vllm:num_preemptions_total delta per shape (two requests)"
+ },
+ "images": {
+  "release_image": "September 25 release image (unchanged overlay)",
+  "with_fix": "release image + the fixed single_type_kv_cache_manager.py"
+ },
+ "results": {
+  "release_image": {
+   "input_260096_output_2048": {
+    "measured_runs": [
+     {
+      "ttft_seconds": 98.886,
+      "input_tps": 2630.3,
+      "decode_tps": 91.36,
+      "request_seconds": 121.293,
+      "output_token_ids_sha256": "4ba3969e47681d47499629f8a2214e1bdc45953cbd63f9e9757238fd3eb4ae9e"
+     },
+     {
+      "ttft_seconds": 98.448,
+      "input_tps": 2642.0,
+      "decode_tps": 97.01,
+      "request_seconds": 119.549,
+      "output_token_ids_sha256": "fda6f9daad3b32f79c9b24ee5d7dd380d362ba84271109a447d69ea2c0b7f610"
+     }
+    ],
+    "kv_preemptions": 10
+   },
+   "input_131072_output_2048": {
+    "measured_runs": [
+     {
+      "ttft_seconds": 47.721,
+      "input_tps": 2746.6,
+      "decode_tps": 99.76,
+      "request_seconds": 68.241,
+      "output_token_ids_sha256": "f74cdbb44e299cb1cf3bd438ae434272f8e2ce99d65e18eec3704ab3260d9949"
+     },
+     {
+      "ttft_seconds": 47.697,
+      "input_tps": 2748.0,
+      "decode_tps": 101.46,
+      "request_seconds": 67.872,
+      "output_token_ids_sha256": "8cd3a154a182aaece1f66e326711fb263128b80340df2803b8ee5af3d454ba85"
+     }
+    ],
+    "kv_preemptions": 2
+   },
+   "input_8192_output_2048": {
+    "measured_runs": [
+     {
+      "ttft_seconds": 3.053,
+      "input_tps": 2683.4,
+      "decode_tps": 102.67,
+      "request_seconds": 22.99,
+      "output_token_ids_sha256": "e9cfd483b7261580fc8b23da548340599b9af2493562132de3e2c8478002ffac"
+     },
+     {
+      "ttft_seconds": 3.051,
+      "input_tps": 2684.7,
+      "decode_tps": 104.99,
+      "request_seconds": 22.548,
+      "output_token_ids_sha256": "a9a91ff9025f817fb6c390e2130b424ca70f1b9b7df7173e53739756256bcad8"
+     }
+    ],
+    "kv_preemptions": 0
+   }
+  },
+  "with_fix": {
+   "input_260096_output_2048": {
+    "measured_runs": [
+     {
+      "ttft_seconds": 91.987,
+      "input_tps": 2827.5,
+      "decode_tps": 101.49,
+      "request_seconds": 112.156,
+      "output_token_ids_sha256": "8410043c0cf9552f8ab108b8dde37212a3f412a0202e33b9239471b94ef23fea"
+     },
+     {
+      "ttft_seconds": 90.964,
+      "input_tps": 2859.3,
+      "decode_tps": 97.67,
+      "request_seconds": 111.922,
+      "output_token_ids_sha256": "cbbea2e9418008c0ba187da961f241599069761af1db804de20dc8f641562a03"
+     }
+    ],
+    "kv_preemptions": 0
+   },
+   "input_131072_output_2048": {
+    "measured_runs": [
+     {
+      "ttft_seconds": 45.018,
+      "input_tps": 2911.6,
+      "decode_tps": 105.58,
+      "request_seconds": 64.407,
+      "output_token_ids_sha256": "4ab7f73b845b21eefd5c029b483b3765fa5513165f2c6bf9ac7312a672c51394"
+     },
+     {
+      "ttft_seconds": 45.103,
+      "input_tps": 2906.0,
+      "decode_tps": 100.04,
+      "request_seconds": 65.566,
+      "output_token_ids_sha256": "82665e00d9795f9b5e95a841c7cf22573513c57909ed9eb9861a7ba2f28009e7"
+     }
+    ],
+    "kv_preemptions": 0
+   },
+   "input_8192_output_2048": {
+    "measured_runs": [
+     {
+      "ttft_seconds": 3.052,
+      "input_tps": 2684.2,
+      "decode_tps": 93.93,
+      "request_seconds": 24.845,
+      "output_token_ids_sha256": "b313d777afd675ccb622e9a392009ab40fd06d5d6e2ff65262d34735a64f24c7"
+     },
+     {
+      "ttft_seconds": 3.048,
+      "input_tps": 2687.5,
+      "decode_tps": 95.84,
+      "request_seconds": 24.407,
+      "output_token_ids_sha256": "62c03fbbd481d347de8e570cbafc444577cab765ede6779b95dca215565bd7a6"
+     }
+    ],
+    "kv_preemptions": 0
+   }
+  }
+ },
+ "decode_cost_per_verify_cycle_ms": {
+  "release_image": {
+   "260k": 27.62,
+   "131k": 26.49,
+   "8k": 25.81
+  },
+  "with_fix": {
+   "260k": 27.38,
+   "131k": 26.8,
+   "8k": 26.54
+  }
+ },
+ "tokens_per_verify_cycle": {
+  "release_image": {
+   "260k": 2.566,
+   "131k": 2.66,
+   "8k": 2.682
+  },
+  "with_fix": {
+   "260k": 2.691,
+   "131k": 2.748,
+   "8k": 2.52
+  }
+ },
+ "needle_check_with_fix": {
+  "prompt_tokens": 255645,
+  "depths": [
+   0.05,
+   0.25,
+   0.5,
+   0.75,
+   0.95
+  ],
+  "correct": 5,
+  "seconds_each": 90.0,
+  "thinking": "off"
+ },
+ "kv_blocks": {
+  "bytes_per_block": 22630400,
+  "released_kv_bytes": 4429185024,
+  "released_blocks": 195,
+  "needed_at_262144_async": 189,
+  "static_estimate_at_262144": 185,
+  "mamba_groups": 4,
+  "state_blocks_per_group_prefill_async": 6,
+  "static_assumption": 5
+ }
+}
