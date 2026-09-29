@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "scope": "Environment of the September 28 runs in this directory: the same-night A/B (base-*.json.gz on the September 25 release image, fix-*.json.gz on that image with only v1/core/single_type_kv_cache_manager.py replaced) and the release-image validation (validation-*.json.gz).",
+  "runtime_image": {
+    "benchmarked_local_image_id": "sha256:25a3ae9c6803687247c4441804597d090b5c31ff2f05c3068114b2655f9e207a",
+    "benchmarked_local_image_built": "2026-09-29T00:07:23+02:00",
+    "build_inputs": "docker/Dockerfile, runtime/, configs/ and scripts/serve-container.sh are byte-identical between the benchmarked build and tag v0.4.0 for the files the image uses.",
+    "base_image": "vllm/vllm-openai:qwen38-flash-next@sha256:fc120ece0a388cc0aa1caad4a9f1cd92113484ab7ec2fd0efadd62585be05bf8",
+    "published_image": "See the v0.4.0 release notes and docs/reproduce.md for the GHCR digest. The published image is rebuilt from tag v0.4.0 by .github/workflows/publish-image.yml.",
+    "in_image_versions": {
+      "python": "3.12.3",
+      "torch": "2.13.0+cu130",
+      "torch_cuda": "13.0",
+      "vllm": "0.1.dev20073+g8e685d198",
+      "humming_kernels": "0.1.12"
+    },
+    "ab_images": {
+      "base": "sha256:a198ad96fa5a434787ac1f560cace8d72e243bc266a4f467101260e4247f5832 (September 25 release image)",
+      "fix": "sha256:70588a032c748476b728a8701e8459451e01075808b499e4305ed832dc618d5a (release image + the fixed file; vLLM package byte-identical to the validation image)"
+    }
+  },
+  "model": {
+    "target": "albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE",
+    "canonical_tensor_revision": "ef554143369a706525336f6b42a09094835dc077",
+    "draft": "runtime/mtp-int4-g32 inside the model directory (compact INT4 MTP draft)"
+  },
+  "launch": {
+    "how": "configs/2x3090-128gb.env with configs/fast-256k.env appended, served with scripts/docker_serve.sh (make serve).",
+    "effective_profile_env": {
+      "KV_CACHE_MEMORY_BYTES": "4429185024",
+      "MAX_MODEL_LEN": "262144",
+      "MAX_NUM_SEQS": "1",
+      "MAX_NUM_BATCHED_TOKENS": "4096",
+      "MTP_DEPTH": "3",
+      "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "84",
+      "VLLM_PREFIX_CACHE_RETENTION_INTERVAL": "1600",
+      "QWEN38_STREAM_STAGE": "1",
+      "QWEN38_STREAM_STAGE_MIN_TOKENS": "1536",
+      "QWEN38_STAGE_OVERLAP": "1",
+      "QWEN38_ASYNC_SCHEDULING": "1",
+      "QWEN38_TRITON_SKINNY": "1",
+      "VLLM_MTP_DRAFT_VOCAB_RANGES": "[[0,65536],[248044,248320]]",
+      "DISABLE_CUSTOM_ALL_REDUCE": "0",
+      "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:False",
+      "QWEN38_PLE_PREFAULT": "1",
+      "JIT_CACHE_DIR": "persistent host directory mounted at /root/.humming and /root/.triton"
+    },
+    "docker_run": "docker run --rm --name qwen38-flash-next --gpus all --ipc host --cap-add SYS_PTRACE --ulimit memlock=-1 --ulimit stack=67108864 -p 127.0.0.1:18088:18088 -e <profile env> -v <jit-cache>/humming:/root/.humming -v <jit-cache>/triton:/root/.triton -v <model dir>:/model:ro <image> /model",
+    "vllm_non_default_args": {
+      "model": "/model",
+      "served_model_name": [
+        "Qwen3.8-Flash-Next"
+      ],
+      "dtype": "bfloat16",
+      "trust_remote_code": true,
+      "max_model_len": 262144,
+      "max_num_seqs": 1,
+      "max_num_batched_tokens": 4096,
+      "enable_chunked_prefill": true,
+      "tensor_parallel_size": 2,
+      "enable_expert_parallel": true,
+      "moe_backend": "humming",
+      "kv_cache_memory_bytes": 4429185024,
+      "enable_prefix_caching": true,
+      "mamba_cache_mode": "align",
+      "offload_backend": "uva",
+      "cpu_offload_gb": 30.0,
+      "cpu_offload_params": [
+        "experts"
+      ],
+      "load_format": "safetensors",
+      "safetensors_load_strategy": "lazy",
+      "max_parallel_loading_workers": 1,
+      "language_model_only": true,
+      "async_scheduling": true,
+      "compilation_config": {
+        "mode": 0,
+        "cudagraph_mode": "FULL_DECODE_ONLY"
+      },
+      "speculative_config": {
+        "method": "mtp",
+        "num_speculative_tokens": 3,
+        "use_local_argmax_reduction": true,
+        "model": "/model/runtime/mtp-int4-g32"
+      },
+      "enable_auto_tool_choice": true,
+      "tool_call_parser": "qwen3_coder",
+      "reasoning_parser": "qwen3"
+    },
+    "startup_log_checks": [
+      "Triton skinny GEMM enabled for 533 modules",
+      "M4 target staging overlap initialized",
+      "Stream staging: borrowed hot pages of layers [40, 41, 42, 43, 44, 45, 46, 47] as two slots",
+      "PLE prefault complete: 47.7 GiB"
+    ]
+  },
+  "host": {
+    "cpu": "AMD Ryzen Threadripper PRO 5975WX, 32 cores / 64 threads, 1 socket, 1 NUMA node",
+    "memory": "128 GB: 8 x 16 GB DDR4-3200 (8 channels populated)",
+    "swap": "8 GiB swap file permanently; the benchmark guard adds a temporary 56 GiB swap file for model loading and removes it afterwards",
+    "os": "Ubuntu 26.04 LTS",
+    "kernel": "7.0.0-30-generic",
+    "docker": "29.1.3 with the NVIDIA Container Toolkit",
+    "gpus": "2 x NVIDIA GeForce RTX 3090 24 GB (no NVLink)",
+    "nvidia_driver": "595.84, NVIDIA open GPU kernel modules built locally with a PCIe peer-to-peer patch ported from aikitoria/open-gpu-kernel-modules (branch 595.71.05-p2p); user-space driver 595.84",
+    "cuda_driver_api": "13.2",
+    "pcie": "both GPUs PCIe 4.0 x16; nvidia-smi topo -m reports PHB between the GPUs",
+    "p2p": "nvidia-smi topo -p2p r and -p2p w report OK in both directions; custom all-reduce enabled (DISABLE_CUSTOM_ALL_REDUCE=0). Stock GeForce drivers do not expose PCIe P2P on RTX 3090; without it, keep DISABLE_CUSTOM_ALL_REDUCE=1 (about 2.5 ms slower per decode cycle).",
+    "host_conditions": "other GPU and memory-heavy jobs stopped; runs start after 'PLE prefault complete'; persistent Humming/Triton JIT caches already populated; A/B images measured back to back the same night"
+  }
+}
