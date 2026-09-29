@@ -15,6 +15,7 @@ tags:
   - vllm
   - speculative-decoding
   - 256k-context
+  - 128k-context
   - rtx-3090
   - dual-gpu
   - cpu-offload
@@ -28,34 +29,41 @@ Run **Qwen 3.8 Flash Next locally on two RTX 3090 24 GB GPUs and 128 GB RAM**.
 Start with the **[GitHub quickstart and pinned runtime](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it)**;
 the weights require its custom vLLM overlay.
 
-## New: 2,752 tok/s prefill · 104.5 tok/s decode
+## New: 3,029 tok/s prefill · 109.8 tok/s decode
 
-**2× RTX 3090 + 128 GB RAM · fast 256K runtime (September 25)**
+**2× RTX 3090 + 128 GB RAM · v0.4.0 runtime (September 29)**
 
-One request with 131,072 input tokens reaches the first token in **47.6 seconds**
-(**2,752 input tok/s**), then generates 2,048 tokens at **104.5 tok/s**.
-The full 256K window (260,096 input tokens) reaches the first token in
-**98.0 seconds** (**2,654 input tok/s**) and then decodes at up to **103.1 tok/s**.
+With the new **agent 128K profile**, one request with 131,072 input tokens
+reaches the first token in **43.3 seconds** (**3,029 input tok/s**), then
+generates 2,048 tokens at **109.8 tok/s**. The **fast 256K profile** now reads
+the full 256K window (260,096 input tokens) in **90.8 seconds** (**2,865 input
+tok/s**), 8% faster than the September 25 release.
 
-| Fast 256K profile | Input + output tokens | First token | Input tok/s | Decode tok/s |
+| Profile | Input + output tokens | First token | Input tok/s | Decode tok/s |
 |---|---:|---:|---:|---:|
-| 128K prompt | 131,072 + 2,048 | **47.6 s** | **2,752** | **104.5** |
-| Full 256K window | 260,096 + 2,048 | **98.0 s** | **2,654** | **103.1** |
+| Agent 128K, best of 2 | 131,072 + 2,048 | **43.3 s** | **3,029** | **109.8** |
+| Fast 256K, 3 runs | 131,072 + 2,048 | 45.0–46.0 s | 2,852–2,916 | 98.9–101.9 |
+| Fast 256K, 3 runs | 260,096 + 2,048 | **90.8 s** | **2,864–2,865** | 94.0–98.3 |
 
-![Fast 256K runtime: time to first token and decode speed](https://raw.githubusercontent.com/DominikBucko/qwen38-flash-next-2x3090/main/docs/images/fast-256k-progress.svg)
+This is a **runtime release**. Clone the GitHub repository and use
+`configs/fast-256k.env` or `configs/agent-128k.env`, or pull the prebuilt
+`ghcr.io/dominikbucko/qwen38-flash-next-2x3090:v0.4.0` image (pin the digest
+from the release notes). The model weights on this page are unchanged.
 
-This is a **runtime release**: clone the GitHub repository and use its
-`configs/fast-256k.env` profile. The model weights on this page are unchanged.
-Large prefills now stream each layer's cold experts to the GPU ahead of time,
-host-side stalls between decode steps are removed, and decode uses a P2P
-all-reduce, a skinny GEMM kernel and a smaller MTP draft vocabulary. The target
-still verifies every token. Target weights, BF16 KV, FP8 PLE, ten-expert routing
-and the approximate QSA budget are unchanged.
+v0.4.0 fixes a KV-cache leak that kept one recurrent-state block per prefill
+chunk alive in each Mamba layer group. Long requests used to fill the cache and
+restart several times, and now they run without preemptions. The agent profile
+limits requests to 135,168 tokens and uses the freed cache memory to keep 16 more
+experts per GPU on the cards (hot100). Decode then fetches fewer experts from
+system memory. Target weights, BF16 KV, FP8 PLE, ten-expert routing and the
+approximate QSA budget are unchanged.
 
 Decode depends on free RAM: the runtime keeps about 60 GB of expert weights and
-the 51.2 GB PLE table in system memory. With another job filling RAM, full-context
-decode was 91–95 tok/s. Input tok/s means input tokens / time to first token.
-See the [results, conditions and limits](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-25/README.md).
+the 51.2 GB PLE table in system memory. Input tok/s means input tokens / time to
+first token. See the
+[fix report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-28/README.md),
+the [agent profile report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-29/README.md)
+and the [September 25 results](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-25/README.md).
 
 ## Setup
 
