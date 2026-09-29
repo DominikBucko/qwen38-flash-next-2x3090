@@ -21,7 +21,7 @@ def initialize(method, layer):
         return
     if method.num_bits != 4 or method.group_size != 128:
         raise RuntimeError('staging overlap only checked for target INT4 group128')
-    if (hot is base or not 64 <= hot.num_experts <= 96 or base.num_experts != 256
+    if (hot is base or not 64 <= hot.num_experts <= 128 or base.num_experts != 256
             or layer.top_k != 10 or cache.hot_map.numel() != 512
             or method._static_hot_cache_max_tokens != 16):
         raise RuntimeError('unchecked target staging geometry')

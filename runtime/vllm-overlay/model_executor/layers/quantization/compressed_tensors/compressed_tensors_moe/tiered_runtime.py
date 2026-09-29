@@ -22,7 +22,7 @@ def initialize(method,layer):
     capacity = cache.slot_global_ids.numel()
     local_count = base.num_experts
     local_ids = layer.expert_map[cache.slot_global_ids.long()].long()
-    if local_count!=256 or not 64<=capacity<=96 or local_ids.unique().numel()!=capacity:
+    if local_count!=256 or not 64<=capacity<=128 or local_ids.unique().numel()!=capacity:
         raise RuntimeError('unchecked tiered expert geometry')
     for name in ('w1_zp','w2_zp','w1_bias','w2_bias','g1_alphas','g2_alphas'):
         if getattr(base.quant_config,name) is not None:

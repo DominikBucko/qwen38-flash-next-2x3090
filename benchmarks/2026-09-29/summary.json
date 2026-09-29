@@ -1,0 +1,136 @@
+{
+ "schema_version": 1,
+ "publication_date": "2026-09-29",
+ "measurement_period": "2026-09-29",
+ "status": "agent_128k_profile",
+ "hardware": {
+  "gpus": "2 x RTX 3090 24 GB",
+  "system_memory_gib": 128
+ },
+ "checkpoint": {
+  "repo": "albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE",
+  "canonical_tensor_revision": "ef554143369a706525336f6b42a09094835dc077"
+ },
+ "profile": "configs/agent-128k.env on top of configs/2x3090-128gb.env",
+ "configuration": {
+  "hot_experts_per_rank": 100,
+  "max_model_len": 135168,
+  "kv_bytes_per_rank": 2500000000,
+  "kv_blocks": 110,
+  "reported_max_concurrency": 1.04,
+  "reported_kv_tokens": 140268,
+  "mtp_depth": 3,
+  "max_num_seqs": 1,
+  "batch_tokens": 4096,
+  "async_scheduling": true,
+  "streamed_prefill_staging": true,
+  "custom_all_reduce": true,
+  "triton_skinny_gemm": true,
+  "ple_prefault": true,
+  "retention_interval": 1600
+ },
+ "release_image_validation": {
+  "image_id": "sha256:92e6dc80b0fc43896264ca0c177097627edc3e916599a0ed72351497803fe3dc",
+  "note": "built with docker/Dockerfile from this tree; launched with scripts/docker_serve.sh",
+  "measured_runs_per_shape": 2,
+  "input_131072_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 44.073,
+     "input_tps": 2974.0,
+     "decode_tps": 108.51,
+     "request_seconds": 62.936,
+     "output_token_ids_sha256": "404e7985f0bc7c1a6a59da47ff80400a4462ac8cdf1010171e6b8399ffe1f1fb"
+    },
+    {
+     "ttft_seconds": 43.275,
+     "input_tps": 3028.8,
+     "decode_tps": 109.79,
+     "request_seconds": 61.92,
+     "output_token_ids_sha256": "4ac78dd654160934012ecc7edbe4618d2352ff35954750ce752af911a2321c98"
+    }
+   ],
+   "kv_preemptions": 0
+  },
+  "input_8192_output_2048": {
+   "measured_runs": [
+    {
+     "ttft_seconds": 2.897,
+     "input_tps": 2827.9,
+     "decode_tps": 110.33,
+     "request_seconds": 21.451,
+     "output_token_ids_sha256": "5602224e43772e006fabd6369bce2be7241232ca7b0153bdddfa11f6a918a0ff"
+    },
+    {
+     "ttft_seconds": 2.938,
+     "input_tps": 2787.9,
+     "decode_tps": 106.31,
+     "request_seconds": 22.193,
+     "output_token_ids_sha256": "ead787f2b5514128df514e81775ec3c3aee9e9fa8b464374e5138ce6955e484e"
+    }
+   ],
+   "kv_preemptions": 0
+  },
+  "gpu_memory_used_mib": [
+   23949,
+   23945
+  ]
+ },
+ "decode_cost_7_prompts": {
+  "prompts": "4 x 8K, 2 x 32K, 1 x 131K; 2,048 greedy tokens each; server counters",
+  "agent_128k_hot100": {
+   "ms_per_verify_cycle": 27.41,
+   "tokens_per_cycle": 3.181,
+   "decode_tps": 116.1
+  },
+  "fast_256k_hot84": {
+   "ms_per_verify_cycle": [
+    30.23,
+    30.34
+   ],
+   "tokens_per_cycle": [
+    3.178,
+    3.167
+   ],
+   "decode_tps": [
+    105.1,
+    104.4
+   ]
+  }
+ },
+ "prefix_reuse_check": {
+  "first": {
+   "prompt_tokens": 32794,
+   "seconds": 13.61,
+   "hits": 0,
+   "queries": 32794,
+   "preemptions": 0
+  },
+  "same_prefix_again": {
+   "prompt_tokens": 32794,
+   "seconds": 4.8,
+   "hits": 28800,
+   "queries": 32794,
+   "preemptions": 0
+  },
+  "multi_turn": {
+   "prompt_tokens": 33072,
+   "seconds": 3.82,
+   "hits": 30400,
+   "queries": 33072,
+   "preemptions": 0
+  },
+  "no_cache_control": {
+   "prompt_tokens": 32794,
+   "seconds": 13.13,
+   "hits": 0,
+   "queries": 32794,
+   "preemptions": 0
+  }
+ },
+ "prefix_reuse_greedy_agreement_tokens_of_256": {
+  "cached_vs_first": 32,
+  "control_vs_first": 32,
+  "cached_vs_control": 33
+ }
+}

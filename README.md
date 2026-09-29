@@ -1,8 +1,8 @@
 # Qwen3.8-Flash-Next on 2× RTX 3090
 
-<h2 align="center">2,752 tok/s prefill · 104.5 tok/s decode</h2>
-<p align="center"><strong>262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
-<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/fast-256k.env">fast 256K profile</a>. Full 256K window: 2,654 input tok/s and up to 103.1 tok/s decode.</p>
+<h2 align="center">3,029 tok/s prefill · 109.8 tok/s decode</h2>
+<p align="center"><strong>Up to 262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
+<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/agent-128k.env">agent 128K profile</a>. The <a href="configs/fast-256k.env">fast 256K profile</a> reads a full 260,096-token window in 90.8 s (2,865 input tok/s).</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
@@ -13,7 +13,36 @@ The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE
 tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
 
-## New: fast 256K runtime
+## New: September 29 runtime (v0.4.0)
+
+**Long prompts are 6–8% faster to first token.** On async-scheduled profiles, the
+KV cache leaked one recurrent-state block per prefill chunk in each Mamba layer
+group, so long requests filled the pool and were preempted several times. With
+the fix, the fast 256K profile runs with no preemptions:
+
+| Fast 256K profile, release image, 3 runs | September 25 | September 29 |
+|---|---:|---:|
+| 131,072 + 2,048: first token | 47.6–48.7 s | **45.0–46.0 s** |
+| 131,072 + 2,048: input tok/s | 2,693–2,757 | **2,852–2,916** |
+| 260,096 + 2,048: first token | 98.0 s | **90.8 s** |
+| 260,096 + 2,048: input tok/s | 2,653–2,654 | **2,864–2,865** |
+
+Decode, 8K prefill, 256K needle retrieval and prefix-cache reuse are unchanged.
+See the [same-night A/B and validation](benchmarks/2026-09-28/README.md).
+
+**New agent 128K profile.** [`configs/agent-128k.env`](configs/agent-128k.env)
+halves the context window and spends the freed KV memory on 16 more hot experts
+per GPU. Decode then pulls fewer experts from system memory:
+
+| Agent 128K profile, release image | First token | Input tok/s | Decode tok/s |
+|---|---:|---:|---:|
+| 131,072 + 2,048, best of 2 | **43.3 s** | **3,029** | **109.8** |
+| 7-prompt decode set (8K–131K) | | | 116.1 (fast 256K: 104–105) |
+
+Requests are limited to 135,168 tokens in total. See the
+[agent profile results and limits](benchmarks/2026-09-29/README.md).
+
+## September 25: fast 256K runtime
 
 The September 25 runtime reads a **131,072-token prompt in 47.6 seconds** to
 first token (**2,752 input tok/s**), then generates 2,048 tokens at
@@ -190,6 +219,11 @@ cat configs/fast-256k.env >> .env
 make serve
 ```
 
+For agent work that stays under 128K, use [`configs/agent-128k.env`](configs/agent-128k.env)
+instead. It has the same requirements. The context is 135,168 tokens, and the
+KV memory this frees holds 16 more hot experts per GPU: about 110 tok/s decode
+and 3,000 input tok/s on a 131,072-token prompt ([results](benchmarks/2026-09-29/README.md)).
+
 Image inputs are optional. See the [vision profile and request example](docs/vision.md).
 
 The default now caches 84 experts per layer to leave more room for prefill.
@@ -233,6 +267,8 @@ upload commands.
 
 The small JSON summaries are public:
 
+- [September 29 agent 128K profile results](benchmarks/2026-09-29/summary.json)
+- [September 28 state-block fix A/B and validation](benchmarks/2026-09-28/summary.json)
 - [September 25 fast 256K runtime results](benchmarks/2026-09-25/summary.json)
 - [September 18 experimental long-context and fresh-agent results](benchmarks/2026-09-18/summary.json)
 - [`benchmarks/serving-summary.json`](benchmarks/serving-summary.json)

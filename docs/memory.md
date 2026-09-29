@@ -50,7 +50,7 @@ The main adjustable users of VRAM are:
 | Setting | Released value | Lower-memory value | Tradeoff |
 |---|---:|---:|---|
 | `VLLM_WNA16_STATIC_HOT_CACHE_SIZE` | 84 | 80 | Saves about 116 MiB per removed slot on each GPU; more expert misses can reduce decode speed. |
-| `KV_CACHE_MEMORY_BYTES` | 4,429,185,024 | 4,294,967,296 | Saves 128 MiB per GPU; verify that reported KV capacity remains at least 262,144 tokens. |
+| `KV_CACHE_MEMORY_BYTES` | 4,429,185,024 | 4,294,967,296 | Saves 128 MiB per GPU. With async scheduling (fast profile), keep the reported maximum concurrency at 1.02x or more. The reported value omits one state block per Mamba group that async prefill really holds. |
 | `MAX_NUM_BATCHED_TOKENS` | 4,096 | 2,048 | Reduces prefill temporary tensors; lowers prefill throughput. |
 
 Update and rebuild before tuning around a QSA score-allocation OOM. The patched
