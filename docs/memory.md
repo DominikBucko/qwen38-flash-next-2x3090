@@ -55,7 +55,7 @@ uses a different layout:
 | Other experts | Pinned RAM, all 512 per layer (~58 GiB) | Pinned RAM, only the 168 per layer and GPU that are not hot (38 GiB for both GPUs) |
 | PLE table | RAM (~48 GiB), prefaulted | Read in place from the checkpoint on NVMe, through the page cache |
 | Decode, cold experts | Copied into the GPU cache on a miss | Computed by the CPU (one thread pool per GPU), ~30% by the GPU over PCIe |
-| Prefill, cold experts | Streamed to the GPU | Streamed to the GPU, each GPU only its own half |
+| Prefill, cold experts | Streamed to the GPU (each GPU its own half), in 4,096-token chunks | Streamed to the GPU (each GPU its own half), in 8,192-token chunks |
 
 Nothing is pruned: every token still uses all ten of its routed experts. The container gets a memory limit
 (`MEMORY_LIMIT=auto`: installed RAM minus `HOST_RESERVE_GIB`, 56 GiB on a 64 GB machine), and each GPU's expert
@@ -78,7 +78,7 @@ serving-process CPUs and the arena size. Settings that matter on other machines:
 | `MEMORY_LIMIT` / `HOST_RESERVE_GIB` | `auto` / `8` | Container memory limit; the arenas shrink with it and the experts that no longer fit are read from NVMe. |
 | `QWEN38_GPU_SHARE_FRAC` | `0.3` | Share of each decode layer's cold experts the GPU computes over PCIe while the CPU computes the rest. |
 | `QWEN38_CPU_EXPERTS_CPUS` | `auto` | CPU pools, one per GPU: whole CCDs per GPU on AMD, cores dealt out in turn otherwise. Explicit form: `2-5;8-11` (GPU 0; GPU 1). |
-| `MAX_NUM_BATCHED_TOKENS` | `8192` | Prefill chunk. Every chunk streams all cold experts once, so larger chunks prefill faster. |
+| `MAX_NUM_BATCHED_TOKENS` | `8192` | Prefill chunk. Every chunk streams all cold experts once, so larger chunks prefill faster: 4,096 gives 2,754 instead of 3,396 tok/s at 131K. This is the whole prefill lead over the agent profile, whose larger expert cache leaves no VRAM for 8,192-token chunks. |
 | `CPUSET` | unset | Restrict the container to these CPUs. |
 
 One request at a time (`MAX_NUM_SEQS=1`): the CPU decode path handles one sequence of up to four tokens per

@@ -46,8 +46,10 @@ The [64 GB profile](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blo
 of the two-GPU runtime (v0.5.0) runs **both cards with 64 GB of system RAM**. The 128 GB profiles keep a pinned
 copy of every expert and the PLE table in RAM. Here each GPU owns its 88 most-used experts per layer outright,
 and the other experts of its half live once in RAM (38 GiB for both GPUs). During decode a CPU thread pool per
-GPU computes them while the GPU takes a share over PCIe; prefill streams each GPU's half. The FP8 PLE table is
-read in place from these files on NVMe.
+GPU computes them while the GPU takes a share over PCIe. Prefill streams them to the GPUs in 8,192-token chunks.
+The larger chunks, not the RAM layout, are why it prefills faster than the 128 GB profile, which uses 4,096
+([details](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-30/README.md#why-prefill-is-faster-than-with-the-128-gb-agent-profile)).
+The FP8 PLE table is read in place from these files on NVMe.
 
 | Two RTX 3090s, machine limited to 64 GB RAM, 3 runs | First token | Prefill | Decode |
 |---|---:|---:|---:|
