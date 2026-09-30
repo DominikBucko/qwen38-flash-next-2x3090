@@ -660,6 +660,139 @@
      "accepted_per_draft": 2.213
     }
    ]
+  },
+  {
+   "id": "64gb-v050-image",
+   "kind": "64gb",
+   "description": "64 GB profile, published v0.5.0 image",
+   "container_cpus": "all 64 CPUs",
+   "overrides": {},
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+   "raw": "raw/64gb-v050-image.json",
+   "results": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 3.658,
+     "total_s": 7.319,
+     "prefill_tok_s": 1128.2,
+     "decode_tok_s": 69.65,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.212
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 10.147,
+     "total_s": 16.456,
+     "prefill_tok_s": 3232.3,
+     "decode_tok_s": 81.0,
+     "preemptions": 0.0,
+     "accepted_per_draft": 1.948
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 38.599,
+     "total_s": 44.538,
+     "prefill_tok_s": 3396.5,
+     "decode_tok_s": 86.03,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.255
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 2.589,
+     "total_s": 15.318,
+     "prefill_tok_s": 3173.9,
+     "decode_tok_s": 80.37,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.272
+    }
+   ]
+  },
+  {
+   "id": "64gb-v050-image-chunk4096",
+   "kind": "chunk-size",
+   "description": "64 GB profile, published v0.5.0 image, 4,096-token prefill chunks",
+   "container_cpus": "all 64 CPUs",
+   "overrides": {
+    "MAX_NUM_BATCHED_TOKENS": "4096"
+   },
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+   "raw": "raw/64gb-v050-image-chunk4096.json",
+   "results": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 3.635,
+     "total_s": 7.084,
+     "prefill_tok_s": 1135.3,
+     "decode_tok_s": 73.94,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.282
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 12.004,
+     "total_s": 18.35,
+     "prefill_tok_s": 2732.3,
+     "decode_tok_s": 80.52,
+     "preemptions": 0.0,
+     "accepted_per_draft": 1.977
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 47.611,
+     "total_s": 53.558,
+     "prefill_tok_s": 2753.5,
+     "decode_tok_s": 85.92,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.318
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 3.222,
+     "total_s": 16.367,
+     "prefill_tok_s": 2550.9,
+     "decode_tok_s": 77.82,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.097
+    }
+   ]
+  },
+  {
+   "id": "128gb-agent-v050-chunk8192",
+   "kind": "chunk-size",
+   "description": "128 GB agent profile, published v0.5.0 image, 8,192-token prefill chunks",
+   "container_cpus": "all 64 CPUs",
+   "overrides": {
+    "MAX_NUM_BATCHED_TOKENS": "8192"
+   },
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+   "raw": null,
+   "results": [],
+   "error": "CUDA out of memory on the first request (4,127 prompt tokens): 80 MiB requested with 33.81 MiB free on GPU 1 (23.45 GiB in use, 11.35 GiB of it allocated by PyTorch); the server answered HTTP 500"
   }
  ]
 }

@@ -36,9 +36,11 @@ checkpoint on NVMe.
 | 8,218 + 1,024 | 2.6 s | 3,114–3,146 tok/s | 78.2–79.7 tok/s |
 | 131,099 + 512, 12 CPU cores (Ryzen 9 9900X layout) | 38.4 s | 3,413 tok/s | 80.7 tok/s |
 
-Prefill is faster than with the 128 GB agent profile because each GPU streams only its own half of the cold
-experts, in 8K chunks. Decode is about a quarter slower and depends on CPU memory bandwidth. Requests are limited
-to 135,168 tokens, one at a time. CUDA P2P is not needed. Enable it with:
+Prefill is faster than with the 128 GB agent profile only because of the larger prefill chunks. Every chunk streams
+all of a GPU's cold experts once, and keeping 88 instead of 100 experts per layer on each GPU leaves the VRAM for
+8,192-token chunks instead of 4,096. With 4,096 this profile prefills 131K at 2,754 tok/s, a little below the agent
+profile. Decode is about a quarter slower and depends on CPU memory bandwidth. Requests are limited to 135,168
+tokens, one at a time. CUDA P2P is not needed. Enable it with:
 
 ```bash
 cat configs/2x3090-64gb.env >> .env

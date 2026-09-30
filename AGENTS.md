@@ -236,7 +236,11 @@ profile therefore switches to the hot-only design of the single-GPU runtime
   it the 8K dummy prefill hit an illegal memory access).
 
 VRAM: 96 hot experts per GPU ran out of memory in the first 8K prefill chunk (105 MiB free for a 160 MiB
-allocation after the 2.33 GiB KV pool); 88 peaks at 23.7 GB. The 128 GB profiles are unchanged: every new path is
+allocation after the 2.33 GiB KV pool); 88 peaks at 23.7 GB. The 8K chunks are the whole prefill lead over the
+agent profile, not the expert layout: every chunk streams all of a GPU's cold experts once (~20 GB), and with
+`MAX_NUM_BATCHED_TOKENS=4096` this profile prefills 131K at 2,754 tok/s (agent profile: 2,907–2,964). The agent
+profile cannot take 8K chunks as is: its 100-slot expert cache leaves no room, and with 8,192 it ran out of VRAM on
+the first request (80 MiB requested, 34 MiB free). The 128 GB profiles are unchanged: every new path is
 behind `QWEN38_HOT_ONLY`, `QWEN38_CPU_EXPERTS` or `QWEN38_PLE_MMAP`, and the launcher's memory limit and CPU set
 are opt-in (the 128 GB loader relies on swap). Results and the regression check are in `benchmarks/2026-09-30/`.
 

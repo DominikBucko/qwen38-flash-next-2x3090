@@ -2,12 +2,14 @@
 
 **3,410 tok/s prefill and 84 tok/s decode on a 131K-token prompt, with 64 GB of system RAM**: the new
 [`configs/2x3090-64gb.env`](../../configs/2x3090-64gb.env) profile on two RTX 3090s (issue #27). Prefill is
-faster than the 128 GB agent profile (3,029 tok/s); decode is about a quarter slower (~110 tok/s there).
+faster than the 128 GB agent profile (3,029 tok/s) only because this profile has the VRAM for 8,192-token prefill
+chunks ([why](#why-prefill-is-faster-than-with-the-128-gb-agent-profile)); decode is about a quarter slower (~110
+tok/s there).
 
 The profile does not keep a pinned copy of every expert in RAM. Each GPU owns its 88 most-used experts per layer
 outright; the other 168 of its half live once in a RAM arena (38 GiB for both GPUs). During decode a CPU thread
-pool per GPU computes them while the GPU computes a share over PCIe; during prefill each GPU streams its own
-half. The FP8 PLE table is read in place from the checkpoint on NVMe. See
+pool per GPU computes them while the GPU computes a share over PCIe; during prefill each GPU streams them over
+PCIe, once per chunk. The FP8 PLE table is read in place from the checkpoint on NVMe. See
 [docs/memory.md](../../docs/memory.md#64-gb-ram-the-2x3090-64gb-profile).
 
 ## Setup
@@ -44,6 +46,12 @@ passed every time.
 70–71 °C, container at its 56 GiB limit (46 GiB of process memory, 38 GiB of it expert arenas; the rest page
 cache), CPU Tctl 83–85 °C.
 
+The published image `ghcr.io/dominikbucko/qwen38-flash-next-2x3090:v0.5.0`
+(`sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387`, built by CI from the release tag; all
+57 installed overlay files match the tag's manifest) ran the same protocol once: 1,128 / 69.7 (4K),
+3,232 / 81.0 (32K), 3,396 / 86.0 (131K) and 3,174 / 80.4 (8K) prefill / decode tok/s, prefill within 1% of the runs
+in the table. The smoke test passed.
+
 ### A 12-core desktop CPU
 
 The container restricted to 12 cores on 2 CCDs (`CPUSET=0-5,8-13,32-37,40-45`), the core layout of a Ryzen 9
@@ -70,6 +78,27 @@ faster per core.
 - **Quality**: the weights, KV precision (BF16) and expert math are the same as in the 128 GB profiles; the CPU
   and GPU-share expert kernels were checked against FP32 references in the single-GPU runtime. No model-level
   quality run was made for this profile.
+
+## Why prefill is faster than with the 128 GB agent profile
+
+Both profiles stream all of a GPU's cold experts over PCIe once per prefill chunk and run each expert's GEMM once,
+whatever the chunk's size: ~20 GB per GPU and chunk here, ~21 GB in the agent profile. A 131K prompt takes 16
+chunks of 8,192 tokens or 32 of 4,096. This profile keeps 88 experts per layer on each GPU. The agent profile's
+expert cache holds 100 (about 1.4 GiB more per card), and it uses 4,096-token chunks. Changing only the chunk size
+(the 64 GB rows and the agent run with 8,192-token chunks on the published v0.5.0 image; the agent range is the
+five regression runs below):
+
+| Run | 4K + 256 (first request) | 32K + 512 | 131K + 512 | 8K + 1,024 |
+|---|---|---|---|---|
+| 64 GB profile, 8,192-token chunks (default) | 1,128 / 69.7 | 3,232 / 81.0 | 3,396 / 86.0 | 3,174 / 80.4 |
+| 64 GB profile, `MAX_NUM_BATCHED_TOKENS=4096` | 1,135 / 73.9 | 2,732 / 80.5 | 2,754 / 85.9 | 2,551 / 77.8 |
+| Agent 128K profile, 4,096-token chunks (default) | 977–1,025 | 2,531–2,735 | 2,907–2,964 | 2,499–2,530 |
+| Agent 128K profile, `MAX_NUM_BATCHED_TOKENS=8192` | out of VRAM | | | |
+
+(prefill / decode tok/s; prefill only for the agent range.) With 4,096-token chunks this profile needs 47.6 s
+instead of 38.6 s for the 131K prompt and prefills at or slightly below the agent profile; decode does not change.
+The agent profile with 8,192-token chunks ran out of VRAM on its first request (80 MiB requested, 34 MiB free).
+Its VRAM goes to the larger expert cache, which its decode uses.
 
 ## Regression check of the 128 GB profiles
 
