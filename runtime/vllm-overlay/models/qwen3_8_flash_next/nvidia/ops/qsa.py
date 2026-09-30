@@ -250,6 +250,8 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
     partial_output_ptr,
     partial_lse_ptr,
     output_ptr,
+    k_scale_ptr,
+    v_scale_ptr,
     stride_q_row,
     stride_q_head,
     stride_k_block,
@@ -258,6 +260,9 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
     stride_v_block,
     stride_v_token,
     stride_v_head,
+    stride_s_block,
+    stride_s_token,
+    stride_s_head,
     stride_indices_row,
     stride_table_req,
     stride_output_row,
@@ -265,6 +270,7 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
     num_rows,
     num_cache_blocks,
     num_requests,
+    QUANT: tl.constexpr,
     TOPK: tl.constexpr,
     PAGE_SIZE: tl.constexpr,
     PAGE_TABLE_WIDTH: tl.constexpr,
@@ -329,25 +335,52 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
         valid &= (physical_page >= 0) & (physical_page < num_cache_blocks)
         # physical_page * block stride can overflow int32 for large caches.
         safe_page = tl.maximum(physical_page, 0).to(tl.int64)
-        keys = tl.load(
-            k_cache_ptr
-            + safe_page[None, :] * stride_k_block
-            + page_offset[None, :] * stride_k_token
-            + kv_head * stride_k_head
-            + dim_offsets[:, None],
-            mask=valid[None, :],
-            other=0.0,
-        )
-        values = tl.load(
-            v_cache_ptr
-            + safe_page[:, None] * stride_v_block
-            + page_offset[:, None] * stride_v_token
-            + kv_head * stride_v_head
-            + dim_offsets[None, :],
-            mask=valid[:, None],
-            other=0.0,
-        )
+        if QUANT:
+            # Per-(token, head) quantized cache: exact int8/fp8 -> BF16 widening, the K scale is applied
+            # to the scores and the V scale to the probabilities (both per selected token).
+            keys = tl.load(
+                k_cache_ptr
+                + safe_page[None, :] * stride_k_block
+                + page_offset[None, :] * stride_k_token
+                + kv_head * stride_k_head
+                + dim_offsets[:, None],
+                mask=valid[None, :],
+                other=0,
+            ).to(tl.bfloat16)
+            values = tl.load(
+                v_cache_ptr
+                + safe_page[:, None] * stride_v_block
+                + page_offset[:, None] * stride_v_token
+                + kv_head * stride_v_head
+                + dim_offsets[None, :],
+                mask=valid[:, None],
+                other=0,
+            ).to(tl.bfloat16)
+            scale_offsets = safe_page * stride_s_block + page_offset * stride_s_token + kv_head * stride_s_head
+            key_scale = tl.load(k_scale_ptr + scale_offsets, mask=valid, other=0.0)
+            value_scale = tl.load(v_scale_ptr + scale_offsets, mask=valid, other=0.0)
+        else:
+            keys = tl.load(
+                k_cache_ptr
+                + safe_page[None, :] * stride_k_block
+                + page_offset[None, :] * stride_k_token
+                + kv_head * stride_k_head
+                + dim_offsets[:, None],
+                mask=valid[None, :],
+                other=0.0,
+            )
+            values = tl.load(
+                v_cache_ptr
+                + safe_page[:, None] * stride_v_block
+                + page_offset[:, None] * stride_v_token
+                + kv_head * stride_v_head
+                + dim_offsets[None, :],
+                mask=valid[:, None],
+                other=0.0,
+            )
         scores = tl.dot(query, keys)
+        if QUANT:
+            scores *= key_scale[None, :]
         # Scaling scores avoids re-quantizing a scaled query to BF16.
         scores *= softmax_scale_log2
         scores = tl.where(valid[None, :], scores, -1.0e20)
@@ -356,8 +389,12 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
         probabilities = tl.where(
             valid[None, :], tl.math.exp2(scores - next_max[:, None]), 0.0
         )
+        if QUANT:
+            weighted = (probabilities * value_scale[None, :]).to(values.dtype)
+        else:
+            weighted = probabilities.to(values.dtype)
         accumulator = tl.dot(
-            probabilities.to(values.dtype),
+            weighted,
             values,
             acc=accumulator * alpha[:, None],
         )
@@ -890,8 +927,11 @@ def qsa_sparse_paged_attention(
     block_table: torch.Tensor,
     token_to_req: torch.Tensor,
     out: torch.Tensor | None = None,
+    k_scale: torch.Tensor | None = None,
+    v_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Run sparse GQA directly over paged BF16 K/V caches."""
+    """Run sparse GQA directly over paged BF16 K/V caches, or int8/fp8 caches with per-(token, head)
+    float32 scales k_scale/v_scale shaped [num_blocks, block_size, num_kv_heads]."""
 
     if not q.is_cuda or not HAS_TRITON:
         raise RuntimeError("paged QSA sparse attention requires CUDA and Triton")
@@ -909,7 +949,14 @@ def qsa_sparse_paged_attention(
         raise ValueError("QSA sparse attention requires valid grouped-query heads")
     head_dim = q.shape[2]
     assert head_dim >= 16 and (head_dim & (head_dim - 1)) == 0
-    assert q.dtype == k_cache.dtype == v_cache.dtype == torch.bfloat16
+    quant = k_scale is not None
+    if quant:
+        assert q.dtype == torch.bfloat16 and k_cache.dtype == v_cache.dtype
+        assert k_cache.dtype in (torch.int8, torch.float8_e4m3fn)
+        assert v_scale is not None and k_scale.shape == v_scale.shape == k_cache.shape[:3]
+        assert k_scale.dtype == v_scale.dtype == torch.float32 and k_scale.stride() == v_scale.stride()
+    else:
+        assert q.dtype == k_cache.dtype == v_cache.dtype == torch.bfloat16
     assert logical_indices.dtype == block_table.dtype == torch.int32
     assert token_to_req.dtype == torch.int32
     assert q.device == k_cache.device == v_cache.device
@@ -977,6 +1024,8 @@ def qsa_sparse_paged_attention(
         partial_output,
         partial_lse,
         out,
+        k_scale if quant else out,
+        v_scale if quant else out,
         q.stride(0),
         q.stride(1),
         k_cache.stride(0),
@@ -985,6 +1034,9 @@ def qsa_sparse_paged_attention(
         v_cache.stride(0),
         v_cache.stride(1),
         v_cache.stride(2),
+        k_scale.stride(0) if quant else 0,
+        k_scale.stride(1) if quant else 0,
+        k_scale.stride(2) if quant else 0,
         logical_indices.stride(0),
         block_table.stride(0),
         out.stride(0),
@@ -992,6 +1044,7 @@ def qsa_sparse_paged_attention(
         q.shape[0],
         k_cache.shape[0],
         block_table.shape[0],
+        QUANT=quant,
         TOPK=logical_indices.shape[1],
         PAGE_SIZE=k_cache.shape[1],
         PAGE_TABLE_WIDTH=block_table.shape[1],

@@ -45,12 +45,34 @@ for name in \
   QWEN38_TRITON_SKINNY \
   QWEN38_PLE_PREFAULT \
   QWEN38_PLE_PREFAULT_RESERVE_GIB \
-  VLLM_MTP_DRAFT_VOCAB_RANGES
+  VLLM_MTP_DRAFT_VOCAB_RANGES \
+  KV_CACHE_DTYPE \
+  VLLM_API_KEY
 do
   if declare -p "$name" &>/dev/null; then
     docker_env+=(-e "$name=${!name}")
   fi
 done
+# The 64 GB profile's QWEN38_* settings (hot-only experts, CPU pools, arena) are passed through as well.
+while IFS= read -r name; do
+  case " ${docker_env[*]} " in *" $name="*) continue ;; esac
+  docker_env+=(-e "$name=${!name}")
+done < <(compgen -e | grep -E '^QWEN38_[A-Z0-9_]+$' || true)
+
+# Optional container limits. The 64 GB profile sets MEMORY_LIMIT=auto: installed RAM (MemTotal rounded up to a
+# multiple of 8 GiB) minus HOST_RESERVE_GIB (default 8) for the OS; the runtime sizes its expert arenas from it.
+# Unset keeps the 128 GB profiles unlimited (their loader relies on swap).
+limit_args=()
+if [[ -n "${MEMORY_LIMIT:-}" ]]; then
+  memory_limit=$MEMORY_LIMIT
+  if [[ "$memory_limit" == auto ]]; then
+    mem_total_kib=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)
+    installed_gib=$(( (mem_total_kib + 8388607) / 8388608 * 8 ))
+    memory_limit="$(( installed_gib - ${HOST_RESERVE_GIB:-8} ))g"
+  fi
+  limit_args+=(--memory "$memory_limit" --memory-swap "$memory_limit")
+fi
+[[ -n "${CPUSET:-}" ]] && limit_args+=(--cpuset-cpus "$CPUSET")
 
 # Optional persistent Humming/Triton JIT caches: avoids recompiling kernels on
 # every start and inside the first long request.
@@ -77,6 +99,7 @@ exec docker run --rm \
   --cap-add SYS_PTRACE \
   --ulimit memlock=-1 \
   --ulimit stack=67108864 \
+  ${limit_args[@]+"${limit_args[@]}"} \
   -p "127.0.0.1:$port:$port" \
   "${docker_env[@]}" \
   ${cache_mounts[@]+"${cache_mounts[@]}"} \

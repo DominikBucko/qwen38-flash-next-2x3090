@@ -93,13 +93,15 @@ def apply_tiered(owner, tiered, cache, *, output, hidden_states, w1, w2,
     """One GEMM per stage, same global block schedule and final reduction."""
     assert not apply_router_weight_on_input
     assert a1q_scale is None and a2_scale is None
-    assert cache.dynamic_lru and expert_map is not None
+    assert cache.dynamic_lru
     hidden_states = hidden_states.view(-1,hidden_states.size(-1))
     buffers = owner.prepare_buffers(workspace13,workspace2,topk_ids.size(0),topk_ids.size(1),activation)
     kwargs1,kwargs2 = owner.prepare_humming_moe_kwargs(topk_ids,expert_map,expert_tokens_meta)
     capacity = cache.slot_global_ids.numel()
     local_to_tiered = torch.arange(owner.num_experts,device=topk_ids.device,dtype=torch.int32)+capacity
-    hot_locals = expert_map[cache.slot_global_ids.long()].long()
+    # Without expert parallelism expert_map is None and local ids are global ids.
+    hot_locals = (expert_map[cache.slot_global_ids.long()] if expert_map is not None
+                  else cache.slot_global_ids).long()
     local_to_tiered.scatter_(0,hot_locals,torch.arange(capacity,device=topk_ids.device,dtype=torch.int32))
     original_ids = kwargs1['expert_ids']
     # Unused tail metadata is uninitialized. Only remap valid local IDs.

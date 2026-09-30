@@ -1325,6 +1325,10 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         Each EP rank filters that order to its local experts and mirrors up to
         ``VLLM_WNA16_STATIC_HOT_CACHE_SIZE`` rows.
         """
+        from vllm.model_executor.layers.fused_moe import hot_only
+        if hot_only.size() > 0:
+            CompressedTensorsWNA16MoEMethod._maybe_register_hot_only(self, layer)
+            return
         if self._mixed_vmm_enabled and not self._dynamic_lru_enabled:
             self.maybe_init_mixed_vmm_hot_cache(layer)
             return
@@ -1628,8 +1632,48 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
             self._dynamic_lru_enabled,
             global_ids,
         )
+        from . import cpu_experts
+        if cpu_experts.enabled() and self.layer_name.startswith("language_model.model.layers."):
+            match = re.search(r"(?:^|\.)layers\.(\d+)(?:\.|$)", self.layer_name)
+            self._cpu_experts_layer = int(match.group(1))
+            cpu_experts.register_hot_set(self._cpu_experts_layer, global_ids)
         from .tiered_runtime import initialize
         initialize(self, layer)
+
+    def _maybe_register_hot_only(self, layer) -> None:
+        """Hot-only layers (QWEN38_HOT_ONLY; one GPU or one expert-parallel rank): cold experts come from the host store.
+
+        Runs as the post-load initializer (maybe_init_static_hot_cache), also for AutoGPTQMoEMethod, which
+        delegates here with itself as `self`.
+        """
+        from vllm.model_executor.layers.fused_moe import hot_only
+        if hot_only.size() <= 0:
+            return
+        # The loader sets self.layer_name only after process_weights_after_loading; the layer knows its name.
+        name = getattr(layer, "layer_name", "") or self.layer_name or ""
+        index = hot_only.layer_index(name)
+        if index is None:
+            return
+        ids = getattr(layer.expert_map_manager, "_qwen38_hot_ids", None)
+        if ids is None or layer.w13_weight_packed.shape[0] != len(ids):
+            raise RuntimeError(f"hot-only: {self.layer_name} was not built with the hot-only expert map")
+        owned = getattr(layer.expert_map_manager, "_qwen38_owned_ids", None)
+        from . import cpu_experts, expert_store, stream_v2
+        expert_store.register_hot_set(index, ids, owned)
+        cpu_experts.register_hot_set(index, ids, owned)
+        stream_v2.register(self, layer, index, ids)
+        self._hot_only_layer = index
+        # GPU share selection counts only this rank's cold experts: the other rank's experts look "hot" (>= 0).
+        share_map = layer.expert_map.clone()
+        if owned is not None and len(owned) < share_map.numel():
+            mine = torch.zeros(share_map.numel(), dtype=torch.bool, device=share_map.device)
+            mine[torch.tensor(owned, dtype=torch.long, device=share_map.device)] = True
+            share_map[~mine] = 0
+        self._hot_only_share_map = share_map
+        if len(stream_v2._layers) == expert_store.L:
+            # Last target layer: fill the host store and set up streaming before any forward pass
+            # (the first decode forward runs inside CUDA graph capture).
+            stream_v2.prepare(layer.w13_weight_packed.device)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         # Process weights using the shared oracle infrastructure
@@ -1794,8 +1838,63 @@ class CompressedTensorsWNA16MoEMethod(CompressedTensorsMoEMethod):
         # guaranteed to survive later model-level post-load cleanup.
         w13_weight = getattr(layer, "w13_weight", layer.w13_weight_packed)
         w2_weight = getattr(layer, "w2_weight", layer.w2_weight_packed)
+        hot_only_layer = getattr(self, "_hot_only_layer", None)
+        if hot_only_layer is not None:
+            from . import cpu_experts, stream_v2
+            if x.shape[0] <= 4 and cpu_experts.enabled():
+                # Decode: hot experts on the GPU (the layer's own weights), cold experts on the CPU in parallel;
+                # optionally the GPU also takes a share of the cold experts over PCIe (gpu_share.py).
+                from . import gpu_share
+                svc = cpu_experts.service()
+                share = gpu_share.get(x.device)
+                if share is not None:
+                    share.select(hot_only_layer, topk_ids, self._hot_only_share_map)
+                svc.submit(x, topk_ids, topk_weights, hot_only_layer, mask=share.mask if share is not None else None)
+                if share is not None:
+                    share.launch(hot_only_layer, x, topk_ids, topk_weights)
+                out = self.moe_kernel.apply(
+                    x,
+                    w13_weight,
+                    w2_weight,
+                    topk_weights=topk_weights,
+                    topk_ids=topk_ids,
+                    activation=layer.activation,
+                    global_num_experts=layer.global_num_experts,
+                    expert_map=layer.expert_map,
+                    apply_router_weight_on_input=layer.apply_router_weight_on_input,
+                    shared_experts=shared_experts,
+                    shared_experts_input=shared_experts_input,
+                )
+                if share is not None:
+                    share.join()
+                svc.wait_add(out, hot_only_layer, extra=share.y if share is not None else None)
+                return out
+            assert not layer.apply_router_weight_on_input
+            return stream_v2.forward(hot_only_layer, x, topk_ids, topk_weights, layer.activation)
         cache = self._static_hot_cache
-        if cache is None or x.shape[0] > self._static_hot_cache_max_tokens:
+        cpu_layer = getattr(self, "_cpu_experts_layer", None)
+        if cache is not None and cpu_layer is not None and x.shape[0] <= 4:
+            # Hot experts on the GPU (hot_map sends the rest to -1), cold experts on the CPU in parallel.
+            # The hot set is fixed: this path never runs the LRU update.
+            from .cpu_experts import service
+            svc = service()
+            svc.submit(x, topk_ids, topk_weights, cpu_layer)
+            out = cache.kernel.apply(
+                x,
+                cache.w13_weight,
+                cache.w2_weight,
+                topk_weights=topk_weights,
+                topk_ids=topk_ids,
+                activation=layer.activation,
+                global_num_experts=layer.global_num_experts,
+                expert_map=cache.hot_map,
+                apply_router_weight_on_input=layer.apply_router_weight_on_input,
+                shared_experts=shared_experts,
+                shared_experts_input=shared_experts_input,
+            )
+            svc.wait_add(out, cpu_layer)
+            return out
+        if cache is None or x.shape[0] > self._static_hot_cache_max_tokens or cpu_layer is not None:
             return self.moe_kernel.apply(
                 x,
                 w13_weight,

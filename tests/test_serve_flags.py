@@ -61,6 +61,7 @@ class ServeFlagsTests(unittest.TestCase):
             "        'VISION_MAX_PIXELS': os.environ.get('VISION_MAX_PIXELS'),\n"
             "        'VLLM_WNA16_STATIC_HOT_CACHE_SIZE': os.environ.get('VLLM_WNA16_STATIC_HOT_CACHE_SIZE'),\n"
             "        'VLLM_WNA16_STATIC_HOT_CACHE_FILE': os.environ.get('VLLM_WNA16_STATIC_HOT_CACHE_FILE'),\n"
+            "        **{k: v for k, v in os.environ.items() if k.startswith(('QWEN38_', 'VLLM_WNA16_'))},\n"
             "    }}, target)\n"
         )
         fake_vllm.chmod(0o755)
@@ -366,6 +367,64 @@ class ServeFlagsTests(unittest.TestCase):
         argv = self.captured()["argv"]
         for name, value in settings.items():
             self.assertIn(f"{name}={value}", argv)
+
+    def hot_only_settings(self, **extra: str) -> dict[str, str]:
+        settings = {
+            "QWEN38_HOT_ONLY": "88",
+            "QWEN38_HOST_PY": str(ROOT / "runtime/vllm-overlay/qwen38_host.py"),
+            "QWEN38_EXPERT_ARENA_SLOTS": "8064",
+            "QWEN38_CPU_EXPERTS_CPUS": "2-5;8-11",
+            "QWEN38_MAIN_CPUS": "0-1,6-7",
+        }
+        settings.update(extra)
+        return settings
+
+    def test_64gb_profile_replaces_the_pinned_expert_pool(self) -> None:
+        result = self.run_launcher(settings=self.hot_only_settings())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        captured = self.captured()
+        argv, env = captured["argv"], captured["env"]
+        for flag in ("--offload-backend", "--cpu-offload-gb", "--cpu-offload-params"):
+            self.assertNotIn(flag, argv)
+        self.assertEqual(argv[argv.index("--tensor-parallel-size") + 1], "2")
+        self.assertIn("--enable-expert-parallel", argv)
+        for name, value in (("QWEN38_CPU_EXPERTS", "1"), ("QWEN38_PLE_MMAP", "1"), ("QWEN38_PLE_PREFAULT", "0"),
+                            ("QWEN38_STREAM_STAGE", "0"), ("VLLM_WNA16_DYNAMIC_LRU", "0"),
+                            ("VLLM_WNA16_MIXED_VMM_HOT_CACHE", "0"), ("VLLM_WNA16_STATIC_HOT_CACHE_SIZE", "0"),
+                            ("QWEN38_CPU_EXPERTS_CPUS", "2-5;8-11"), ("QWEN38_EXPERT_ARENA_SLOTS", "8064")):
+            self.assertEqual(env.get(name), value, name)
+        self.assertIn("[qwen38-64gb] CPU expert pool, GPU rank 1: 4 threads on CPUs 8-11", result.stdout)
+
+    def test_128gb_profiles_keep_the_pinned_expert_pool(self) -> None:
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv, env = self.captured()["argv"], self.captured()["env"]
+        self.assertEqual(argv[argv.index("--cpu-offload-params") + 1], "experts")
+        self.assertEqual(env["VLLM_WNA16_DYNAMIC_LRU"], "1")
+        self.assertNotIn("QWEN38_CPU_EXPERTS", env)
+        self.assertEqual(argv[argv.index("--kv-cache-dtype") + 1], "auto")
+
+    def test_64gb_profile_rejects_concurrent_requests(self) -> None:
+        result = self.run_launcher(settings=self.hot_only_settings(MAX_NUM_SEQS="2"))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("MAX_NUM_SEQS must be 1", result.stderr)
+        self.assertFalse(self.capture.exists())
+
+    def test_docker_launcher_memory_limit_and_cpuset_are_opt_in(self) -> None:
+        result = self.run_docker_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertNotIn("--memory", argv)
+        self.assertNotIn("--cpuset-cpus", argv)
+        result = self.run_docker_launcher({"MEMORY_LIMIT": "56g", "CPUSET": "0-11",
+                                           "QWEN38_HOT_ONLY": "88", "QWEN38_GPU_SHARE_FRAC": "0.3"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertEqual(argv[argv.index("--memory") + 1], "56g")
+        self.assertEqual(argv[argv.index("--memory-swap") + 1], "56g")
+        self.assertEqual(argv[argv.index("--cpuset-cpus") + 1], "0-11")
+        self.assertIn("QWEN38_HOT_ONLY=88", argv)
+        self.assertIn("QWEN38_GPU_SHARE_FRAC=0.3", argv)
 
     def test_compose_safety_defaults_match_effective_launcher_defaults(self) -> None:
         result = self.run_launcher()

@@ -2,6 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """GPU-resident Qwen3.8-Flash-Next position-learning enhancement layers."""
 
+import contextlib
+import os
+import warnings
 import math
 from collections.abc import Iterable, Sequence
 
@@ -225,6 +228,101 @@ def _get_ple_embedding_quant_method(
     return Qwen3_8FlashNextPLEFp8EmbeddingMethod()
 
 
+def _ple_mmap_enabled() -> bool:
+    return os.environ.get("QWEN38_PLE_MMAP") == "1" and is_offload_process()
+
+
+class _PleMmapTable:
+    """The PLE n-gram table served straight from the checkpoint files.
+
+    Each checkpoint shard is a zero-copy view into a read-only file mapping, so rows
+    live in the page cache (evictable, charged to the serving cgroup) instead of a
+    51 GB anonymous copy. Lookups hint the kernel first: MADV_RANDOM disables
+    readahead for these mappings, and MADV_WILLNEED on the pages of one lookup lets
+    their faults proceed in parallel instead of one NVMe round trip per row.
+    """
+
+    def __init__(self, model_dir: str, num_shards: int, shard_rows: int, head_dim: int):
+        import json
+        import mmap
+        import struct
+
+        index = json.load(open(os.path.join(model_dir, "model.safetensors.index.json")))
+        names = {}
+        for name, rel in index["weight_map"].items():
+            if ".ngram_embedding.shard_" in name and name.endswith(".weight"):
+                names[int(name.rsplit("shard_", 1)[1][: -len(".weight")])] = (name, rel)
+        if sorted(names) != list(range(num_shards)):
+            raise RuntimeError(f"PLE mmap: expected {num_shards} shards, found {len(names)}")
+        self.shard_rows = shard_rows
+        self.head_dim = head_dim
+        self.page = mmap.PAGESIZE
+        self._maps, self.views, self.bases, self.map_of = {}, [], [], []
+        for shard in range(num_shards):
+            name, rel = names[shard]
+            path = os.path.join(model_dir, rel)
+            if rel not in self._maps:
+                fd = os.open(path, os.O_RDONLY)
+                try:
+                    mm = mmap.mmap(fd, 0, access=mmap.ACCESS_READ)
+                finally:
+                    os.close(fd)
+                mm.madvise(mmap.MADV_RANDOM)
+                with open(path, "rb") as fh:
+                    header_len = struct.unpack("<Q", fh.read(8))[0]
+                    header = json.loads(fh.read(header_len))
+                self._maps[rel] = (mm, 8 + header_len, header)
+            mm, data_start, header = self._maps[rel]
+            meta = header[name]
+            if meta["dtype"] != "F8_E4M3" or meta["shape"][1] != head_dim:
+                raise RuntimeError(f"PLE mmap: unexpected {name} {meta}")
+            start, end = meta["data_offsets"]
+            rows = meta["shape"][0]
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")  # read-only buffer: never written
+                view = torch.frombuffer(mm, dtype=torch.uint8, count=end - start,
+                                        offset=data_start + start)
+            self.views.append(view.view(rows, head_dim))
+            self.bases.append(data_start + start)
+            self.map_of.append(mm)
+        self.num_shards = num_shards
+        self._bounds = torch.arange(num_shards + 1, dtype=torch.int64)
+
+    def _prefetch(self, shard: int, local: torch.Tensor) -> None:
+        import mmap
+        page = self.page
+        offs = local * self.head_dim + self.bases[shard]
+        first = torch.div(offs, page, rounding_mode="floor")
+        last = torch.div(offs + (self.head_dim - 1), page, rounding_mode="floor")
+        pages = torch.unique(torch.cat([first, last])).tolist()
+        mm = self.map_of[shard]
+        run_start = prev = pages[0]
+        for p in pages[1:] + [None]:
+            if p is not None and p == prev + 1:
+                prev = p
+                continue
+            mm.madvise(mmap.MADV_WILLNEED, run_start * page, (prev - run_start + 1) * page)
+            if p is not None:
+                run_start = prev = p
+
+    def gather(self, ids: torch.Tensor, out: torch.Tensor) -> None:
+        """out[i] = table[ids[i]] for int64 ids in checkpoint row coordinates."""
+        out_u8 = out.view(torch.uint8)
+        shard = torch.div(ids, self.shard_rows, rounding_mode="floor")
+        local = ids - shard * self.shard_rows
+        order = torch.argsort(shard, stable=True)
+        bounds = torch.searchsorted(shard[order], self._bounds).tolist()
+        local_sorted = local[order]
+        work = []
+        for s in range(self.num_shards):
+            a, b = bounds[s], bounds[s + 1]
+            if a < b:
+                work.append((s, a, b))
+                self._prefetch(s, local_sorted[a:b])
+        for s, a, b in work:
+            out_u8.index_copy_(0, order[a:b], self.views[s].index_select(0, local_sorted[a:b]))
+
+
 class Qwen3_8FlashNextNGramEmbedding(PleOffloadLayer):
     def __init__(
         self,
@@ -294,18 +392,21 @@ class Qwen3_8FlashNextNGramEmbedding(PleOffloadLayer):
         )
         divisor = int(config.make_ngram_vocab_size_divisible_by)
         padded_vocab_size = ((offset + divisor - 1) // divisor) * divisor
-        self.ngram_embedding = VocabParallelEmbedding(
-            padded_vocab_size,
-            self.head_dim,
-            params_dtype=params_dtype,
-            padding_size=divisor,
-            prefix=f"{prefix}.ngram_embedding",
-            quant_method=_get_ple_embedding_quant_method(
-                quant_config,
-                f"{prefix}.ngram_embedding",
-                getattr(config, "ple_embedding_dtype", None),
-            ),
-        )
+        self._ple_mmap = None
+        emb_device = torch.device("meta") if _ple_mmap_enabled() else None
+        with (emb_device if emb_device is not None else contextlib.nullcontext()):
+            self.ngram_embedding = VocabParallelEmbedding(
+                padded_vocab_size,
+                self.head_dim,
+                params_dtype=params_dtype,
+                padding_size=divisor,
+                prefix=f"{prefix}.ngram_embedding",
+                quant_method=_get_ple_embedding_quant_method(
+                    quant_config,
+                    f"{prefix}.ngram_embedding",
+                    getattr(config, "ple_embedding_dtype", None),
+                ),
+            )
         self.register_buffer(
             "positions_buffer",
             torch.arange(max_total_tokens, dtype=torch.int64),
@@ -443,6 +544,14 @@ class Qwen3_8FlashNextNGramEmbedding(PleOffloadLayer):
             ids = torch.remainder(mixed.unsqueeze(-1), sizes) + offsets
             id_blocks.append(ids[request_indices, adjusted_columns])
         ngram_ids = torch.cat(id_blocks, dim=-1)
+        if self._ple_mmap is not None:
+            if output_buffer is not None:
+                output = output_buffer[:num_tokens, : self.embedding_dim]
+            else:
+                output = torch.empty((num_tokens, self.embedding_dim),
+                                     dtype=self.ngram_embedding.weight.dtype)
+            self._ple_mmap.gather(ngram_ids.reshape(-1), output.reshape(-1, self.head_dim))
+            return output
         if output_buffer is not None:
             output = output_buffer[:num_tokens, : self.embedding_dim]
             torch.index_select(
@@ -532,6 +641,15 @@ class Qwen3_8FlashNextNGramEmbedding(PleOffloadLayer):
                         f"expected {expected_shape}, got "
                         f"{tuple(loaded_weight.shape)}"
                     )
+                if _ple_mmap_enabled():
+                    if embedding.shard_indices.org_vocab_start_index != 0:
+                        raise RuntimeError("PLE mmap requires an unsharded table")
+                    if self._ple_mmap is None:
+                        self._ple_mmap = _PleMmapTable(
+                            os.environ.get("QWEN38_PLE_MMAP_DIR", "/model"),
+                            self.split_ngram_parts, shard_size, embedding.embedding_dim)
+                    loaded.add("ngram_embedding.weight")
+                    continue
                 copy_ple_embedding_shard_(
                     embedding.weight.data,
                     loaded_weight,

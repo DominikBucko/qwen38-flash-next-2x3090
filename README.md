@@ -5,6 +5,9 @@
 <p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/agent-128k.env">agent 128K profile</a>. The <a href="configs/fast-256k.env">fast 256K profile</a> reads a full 260,096-token window in 90.8 s (2,865 input tok/s).</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
+> **Only 64 GB of RAM?** The new [64 GB profile](#new-64-gb-ram-profile) runs the same two cards with half the
+> memory: **3,410 tok/s prefill and 84 tok/s decode** on a 131,072-token prompt.
+
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
 full expert set and an FP8 Ngram table in system memory, caches active (LRU) experts on
 the GPUs, and uses a small MTP3 drafter to recover decode speed.
@@ -12,6 +15,36 @@ the GPUs, and uses a small MTP3 drafter to recover decode speed.
 The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE) combines Intel's AutoRound W4A16 target with FP8 PLE/ngram
 tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
+
+## New: 64 GB RAM profile
+
+[`configs/2x3090-64gb.env`](configs/2x3090-64gb.env) serves the model on two RTX 3090s with **64 GB of system
+RAM** and a 128K context. The 128 GB profiles keep a pinned copy of every expert (~58 GiB) and the PLE table
+(~48 GiB) in RAM. Here each GPU owns its 88 most-used experts per layer outright, and the other experts of its
+half live once in RAM (38 GiB for both GPUs). During decode a CPU thread pool per GPU computes them, with the GPU
+taking a share over PCIe; prefill streams them to the GPUs. The FP8 PLE table is read in place from the
+checkpoint on NVMe.
+
+| 2× RTX 3090, machine limited to 64 GB RAM | First token | Prefill | Decode |
+|---|---:|---:|---:|
+| 131,099 + 512 tokens | 38.4–38.5 s | **3,401–3,413 tok/s** | **84.2–88.8 tok/s** |
+| 32,799 + 512 | 10.2–10.3 s | 3,200–3,211 tok/s | 77.0–83.9 tok/s |
+| 8,218 + 1,024 | 2.6 s | 3,114–3,146 tok/s | 78.2–79.7 tok/s |
+| 131,099 + 512, 12 CPU cores (Ryzen 9 9900X layout) | 38.4 s | 3,413 tok/s | 80.7 tok/s |
+
+Prefill is faster than with the 128 GB agent profile because each GPU streams only its own half of the cold
+experts, in 8K chunks. Decode is about a quarter slower and depends on CPU memory bandwidth. Requests are limited
+to 135,168 tokens, one at a time. CUDA P2P is not needed. Enable it with:
+
+```bash
+cat configs/2x3090-64gb.env >> .env
+make serve
+```
+
+No swap is needed. The container gets the installed RAM minus 8 GiB and sizes its expert arenas from that. See
+the [64 GB section of the memory guide](docs/memory.md#64-gb-ram-the-2x3090-64gb-profile) and the
+[benchmark report](benchmarks/2026-09-30/README.md). The benchmark host runs both cards at PCIe ×16; desktop
+boards often split them ×8/×8 (untested, see the report).
 
 ## New: September 29 runtime (v0.4.0)
 

@@ -77,10 +77,33 @@ rankings=/workspace/static_hot_cache_rankings.json
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1}
 export PYTORCH_CUDA_ALLOC_CONF=$allocator_config
 export VLLM_PLE_CPU_OFFLOAD=1
-export VLLM_WNA16_DYNAMIC_LRU=1
 export VLLM_WNA16_STATIC_HOT_CACHE_FILE=$rankings
-export VLLM_WNA16_MIXED_VMM_HOT_CACHE=1
 export VLLM_FORCE_DYNAMIC_SPEC_SCHEDULING=1
+
+hot_only=${QWEN38_HOT_ONLY:-0}
+[[ "$hot_only" =~ ^[0-9]+$ ]] || { echo "QWEN38_HOT_ONLY must be a number of experts" >&2; exit 2; }
+if (( hot_only > 0 )); then
+  # 64 GB profile (configs/2x3090-64gb.env): each GPU owns QWEN38_HOT_ONLY experts per layer outright; the other
+  # experts of its half live once in a RAM arena. Decode computes them on the CPU (plus a GPU share over PCIe),
+  # prefill streams them to the GPU. The PLE table is read in place from the checkpoint on NVMe.
+  [[ "$MAX_NUM_SEQS" == 1 ]] || { echo "MAX_NUM_SEQS must be 1 with QWEN38_HOT_ONLY" >&2; exit 2; }
+  [[ "$MTP_DEPTH" =~ ^[0-3]$ ]] || { echo "MTP_DEPTH must be 0-3 with QWEN38_HOT_ONLY" >&2; exit 2; }
+  export QWEN38_CPU_EXPERTS=1 QWEN38_CPU_EXPERTS_MODEL="$model"
+  export QWEN38_PLE_MMAP=1 QWEN38_PLE_MMAP_DIR="$model" QWEN38_PLE_PREFAULT=0
+  export QWEN38_STREAM_STAGE=0 QWEN38_STAGE_OVERLAP=0
+  export VLLM_WNA16_DYNAMIC_LRU=0 VLLM_WNA16_MIXED_VMM_HOT_CACHE=0 VLLM_WNA16_STATIC_HOT_CACHE_SIZE=0
+  offload_args=()
+  # Host plan: resolve the "auto" CPU pools (one per GPU) and arena size once for every serving process.
+  host_py=${QWEN38_HOST_PY:-$(python3 -c 'import importlib.util, os; print(os.path.join(os.path.dirname(importlib.util.find_spec("vllm").origin), "qwen38_host.py"))')}
+  while IFS='=' read -r key value; do
+    export "$key=$value"
+  done < <(python3 "$host_py" --env --ranks 2)
+  python3 "$host_py" --ranks 2 | sed 's/^/[qwen38-64gb] /'
+else
+  export VLLM_WNA16_DYNAMIC_LRU=1
+  export VLLM_WNA16_MIXED_VMM_HOT_CACHE=1
+  offload_args=(--offload-backend uva --cpu-offload-gb "$CPU_OFFLOAD_GB" --cpu-offload-params experts)
+fi
 
 exec vllm serve "$model" \
   --served-model-name "$SERVED_MODEL_NAME" \
@@ -94,13 +117,11 @@ exec vllm serve "$model" \
   --load-format safetensors \
   --safetensors-load-strategy lazy \
   --max-parallel-loading-workers "$MAX_PARALLEL_LOADING_WORKERS" \
-  --offload-backend uva \
-  --cpu-offload-gb "$CPU_OFFLOAD_GB" \
-  --cpu-offload-params experts \
+  ${offload_args[@]+"${offload_args[@]}"} \
   --max-model-len "$MAX_MODEL_LEN" \
   --max-num-seqs "$MAX_NUM_SEQS" \
   --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
-  --kv-cache-dtype auto \
+  --kv-cache-dtype "${KV_CACHE_DTYPE:-auto}" \
   --kv-cache-memory-bytes "$KV_CACHE_MEMORY_BYTES" \
   --enable-chunked-prefill \
   --enable-prefix-caching \

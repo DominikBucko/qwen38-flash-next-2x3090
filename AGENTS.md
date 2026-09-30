@@ -206,6 +206,40 @@ request is preempted near the end of prefill. INT8 dense weights would free
 enough VRAM for hot96 at 256K. They were rejected on September 27 because the
 token-agreement gate measured +0.010 nats/token (not lossless).
 
+## September 30 64 GB RAM profile
+
+`configs/2x3090-64gb.env` serves the same checkpoint on two RTX 3090s with 64 GB of RAM (issue #27). The 128 GB
+layout cannot shrink into 64 GB by moving only the PLE table: the dynamic LRU caches need an immutable host copy
+of all 512 experts per layer (~58 GiB pinned), because any cached expert can be evicted and fetched back. The
+profile therefore switches to the hot-only design of the single-GPU runtime
+(github.com/DominikBucko/qwen38-flash-next-3090), made expert-parallel:
+
+- `QWEN38_HOT_ONLY=88`: each EP rank takes its hot set from the experts it owns (linear placement: rank 0 owns
+  0–255), the first 88 of them in the static rankings (`fused_moe/hot_only.py`). The rankings are balanced
+  across the halves (rank 0 owns 51% of the global top-200; the per-rank top-100 unions cover 97.8% of the
+  global top-200). The loader skips everything else, so no expert exists twice.
+- Each rank's other 168 experts per layer live once in its own anonymous, huge-page, `cudaHostRegister`'ed arena
+  (`expert_store.py`, 19 GiB per rank). `vllm/qwen38_host.py` sizes it as a per-rank share of the container limit
+  minus 10 GiB; at 56 GiB every cold expert fits, so the NVMe expert tier (and its tail reader) is unused.
+- Decode (T <= 4): hot experts on the GPU, cold ones on a per-rank CPU pool (`cpu_experts.py`, `cpu_moe.cpp`;
+  the pools are whole CCDs per rank), with `QWEN38_GPU_SHARE_FRAC` of them computed by the GPU over PCIe from the
+  pinned arena (`gpu_share.py`; the selector counts only the rank's own cold experts). Each rank returns its
+  partial output and the existing EP all-reduce sums them.
+- Prefill: `stream_v2.py` DMAs each rank's cold experts in groups of 80, converts them to the Humming layout on
+  the GPU (byte-exact to the loader) and runs the indexed GEMMs; each GPU streams only its half over its own
+  PCIe link.
+- The PLE table is read in place from the checkpoint files (`QWEN38_PLE_MMAP=1`, one PLE worker for both TP
+  ranks, 4 intra-op threads). The warnings in "Why FP8 PLE instead of disk or INT4" apply: the benchmarks ran
+  with a cold page cache per start and did not show a PLE-bound decode, but an unseen access pattern can still
+  page in more rows.
+- vLLM's profile run under EP routes every token to expert -1; `_mul_sum_acc_kernel` masks negative ids (without
+  it the 8K dummy prefill hit an illegal memory access).
+
+VRAM: 96 hot experts per GPU ran out of memory in the first 8K prefill chunk (105 MiB free for a 160 MiB
+allocation after the 2.33 GiB KV pool); 88 peaks at 23.7 GB. The 128 GB profiles are unchanged: every new path is
+behind `QWEN38_HOT_ONLY`, `QWEN38_CPU_EXPERTS` or `QWEN38_PLE_MMAP`, and the launcher's memory limit and CPU set
+are opt-in (the 128 GB loader relies on swap). Results and the regression check are in `benchmarks/2026-09-30/`.
+
 ## Published runtime images
 
 From v0.3.0 on, `.github/workflows/publish-image.yml` builds `docker/Dockerfile`

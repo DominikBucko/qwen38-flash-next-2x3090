@@ -832,6 +832,19 @@ def _prefetch_all_checkpoints(
     threading.Thread(target=_run_prefetch, daemon=True).start()
 
 
+_SAFETENSORS_DTYPES = {
+    "F8_E4M3": torch.float8_e4m3fn, "F8_E5M2": torch.float8_e5m2, "BF16": torch.bfloat16,
+    "F16": torch.float16, "F32": torch.float32, "I64": torch.int64, "I32": torch.int32,
+    "I16": torch.int16, "I8": torch.int8, "U8": torch.uint8, "BOOL": torch.bool,
+}
+
+
+def _ple_mmap_placeholder(name: str) -> bool:
+    """PLE table shards are memory-mapped by the PLE process (QWEN38_PLE_MMAP=1)."""
+    return (".ngram_embedding.shard_" in name and name.endswith(".weight")
+            and os.environ.get("QWEN38_PLE_MMAP") == "1" and is_offload_process())
+
+
 def safetensors_weights_iterator(
     hf_weights_files: list[str],
     use_tqdm_on_load: bool,
@@ -1002,6 +1015,14 @@ def safetensors_weights_iterator(
                     if indexed_names is not None and name not in indexed_names:
                         continue
                     if should_skip_weight(name, local_expert_ids):
+                        continue
+                    if _ple_mmap_placeholder(name):
+                        # The PLE process maps these shards from disk itself;
+                        # yield a shape-only placeholder so nothing is read here.
+                        sl = f.get_slice(name)
+                        yield name, torch.empty(
+                            sl.get_shape(), dtype=_SAFETENSORS_DTYPES[sl.get_dtype()],
+                            device="meta")
                         continue
                     param = f.get_tensor(name)
                     yield name, param

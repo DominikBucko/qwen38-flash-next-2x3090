@@ -42,6 +42,48 @@ Configured or allocated swap is not automatically a serving failure. Continuous
 swap traffic is. Watch `vmstat 1` while generating: persistent nonzero `si` or
 `so` means the working set is reaching storage and throughput will suffer.
 
+## 64 GB RAM: the 2x3090-64gb profile
+
+The 128 GB profiles keep two large pools in system RAM: a pinned copy of every routed expert (about 58 GiB,
+needed because the GPU LRU caches can evict any expert and fetch it back) and the FP8 PLE table (about 48 GiB).
+That does not fit in 64 GB, even with the PLE table on disk. [`configs/2x3090-64gb.env`](../configs/2x3090-64gb.env)
+uses a different layout:
+
+| Pool | 128 GB profiles | 64 GB profile |
+|---|---|---|
+| Hot experts | GPU LRU cache (84–100 per layer and GPU), copies of the RAM pool | 88 per layer and GPU, owned outright |
+| Other experts | Pinned RAM, all 512 per layer (~58 GiB) | Pinned RAM, only the 168 per layer and GPU that are not hot (38 GiB for both GPUs) |
+| PLE table | RAM (~48 GiB), prefaulted | Read in place from the checkpoint on NVMe, through the page cache |
+| Decode, cold experts | Copied into the GPU cache on a miss | Computed by the CPU (one thread pool per GPU), ~30% by the GPU over PCIe |
+| Prefill, cold experts | Streamed to the GPU | Streamed to the GPU, each GPU only its own half |
+
+Nothing is pruned: every token still uses all ten of its routed experts. The container gets a memory limit
+(`MEMORY_LIMIT=auto`: installed RAM minus `HOST_RESERVE_GIB`, 56 GiB on a 64 GB machine), and each GPU's expert
+arena is sized from it. On the benchmark host the container used 46 GiB of process memory (38 GiB of expert
+arenas) and the rest as page cache for PLE rows. No swap is needed.
+
+Append the profile to `.env` and start as usual:
+
+```bash
+cat configs/2x3090-64gb.env >> .env
+make serve
+```
+
+The startup log prints the plan in lines that start with `[qwen38-64gb]`: the CPU pool of each GPU, the
+serving-process CPUs and the arena size. Settings that matter on other machines:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `QWEN38_HOT_ONLY` | `88` | Experts per layer and GPU on the card (~116 MiB of VRAM each). 96 ran out of VRAM during the first 8K prefill chunk; use 80 if a card also drives a display. |
+| `MEMORY_LIMIT` / `HOST_RESERVE_GIB` | `auto` / `8` | Container memory limit; the arenas shrink with it and the experts that no longer fit are read from NVMe. |
+| `QWEN38_GPU_SHARE_FRAC` | `0.3` | Share of each decode layer's cold experts the GPU computes over PCIe while the CPU computes the rest. |
+| `QWEN38_CPU_EXPERTS_CPUS` | `auto` | CPU pools, one per GPU: whole CCDs per GPU on AMD, cores dealt out in turn otherwise. Explicit form: `2-5;8-11` (GPU 0; GPU 1). |
+| `MAX_NUM_BATCHED_TOKENS` | `8192` | Prefill chunk. Every chunk streams all cold experts once, so larger chunks prefill faster. |
+| `CPUSET` | unset | Restrict the container to these CPUs. |
+
+One request at a time (`MAX_NUM_SEQS=1`): the CPU decode path handles one sequence of up to four tokens per
+step. See the [64 GB benchmark report](../benchmarks/2026-09-30/README.md) for measured speed and limits.
+
 ## GPU memory
 
 The default 256K profile uses hot84. Hot88 is an optional, tighter profile.

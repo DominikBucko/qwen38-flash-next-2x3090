@@ -869,7 +869,7 @@ class AutoGPTQMoEMethod(FusedMoEMethodBase):
         shared_experts: SharedExperts | None,
         shared_experts_input: torch.Tensor | None,
     ) -> torch.Tensor:
-        if self._static_hot_cache is not None:
+        if self._static_hot_cache is not None or getattr(self, "_hot_only_layer", None) is not None:
             from vllm.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_wna16 import (
                 CompressedTensorsWNA16MoEMethod,
             )
