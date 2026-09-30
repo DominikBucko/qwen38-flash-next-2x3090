@@ -7,6 +7,10 @@
 
 > **Only 64 GB of RAM?** The new [64 GB profile](#new-64-gb-ram-profile) runs the same two cards with half the
 > memory: **3,410 tok/s prefill and 84 tok/s decode** on a 131,072-token prompt.
+>
+> **Only one GPU?** [qwen38-flash-next-3090](https://github.com/DominikBucko/qwen38-flash-next-3090) runs the
+> same checkpoint on a **single RTX 3090 with 64 GB of RAM**: up to 2,100 tok/s prefill, 43–51 tok/s decode,
+> 128K context.
 
 Qwen3.8-Flash-Next, with its high sparsity and low active param count is a great candidate for CPU offloading under right setup. This build keeps the
 full expert set and an FP8 Ngram table in system memory, caches active (LRU) experts on
