@@ -35,7 +35,13 @@ services:
       ENABLE_VISION: "${ENABLE_VISION:-0}"
       VISION_MAX_IMAGES: "${VISION_MAX_IMAGES:-1}"
       VISION_MAX_PIXELS: "${VISION_MAX_PIXELS:-1048576}"
+      TORCHINDUCTOR_CACHE_DIR: "/root/.torchinductor"
     volumes:
       - "${MODEL_DIR:?Set MODEL_DIR}:/model:ro"
+      # Persistent JIT caches (optional; default ./jit-cache next to this file).
+      - "${JIT_CACHE_DIR:-./jit-cache}:/root/.humming"
+      - "${JIT_CACHE_DIR:-./jit-cache}:/root/.triton"
+      - "${JIT_CACHE_DIR:-./jit-cache}:/root/.torchinductor"
+      - "${JIT_CACHE_DIR:-./jit-cache}:/tmp/torchinductor_root"
     command: ["/model"]
     restart: unless-stopped
