@@ -244,6 +244,25 @@ the first request (80 MiB requested, 34 MiB free). The 128 GB profiles are uncha
 behind `QWEN38_HOT_ONLY`, `QWEN38_CPU_EXPERTS` or `QWEN38_PLE_MMAP`, and the launcher's memory limit and CPU set
 are opt-in (the 128 GB loader relies on swap). Results and the regression check are in `benchmarks/2026-09-30/`.
 
+## September 30 prefill profile
+
+`configs/agent-128k-prefill.env` is `configs/agent-128k.env` with `MAX_NUM_BATCHED_TOKENS=8192` and
+`VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`. Every prefill chunk streams all cold experts once (~21 GB per GPU and chunk
+through the staging path), so 8K chunks halve that traffic on long prompts. hot100 cannot take them: it ran out
+of VRAM on the first request (80 MiB requested, 34 MiB free). hot88 frees about 1.36 GiB per card and peaks at
+23.8–24.0 GiB. Results on the published v0.5.0 image (`benchmarks/2026-09-30/`):
+
+- The 64 GB report's benchmark, 2 runs: 131K + 512 prefill 3,884–3,912 tok/s (agent profile 2,907–2,964), 32K
+  +20–23%, 8K +29%. A verify step costs 10–14% more (131K: 29.0–29.4 vs 26.2–26.6 ms); acceptance is unchanged.
+- The README headline benchmark, best of 2 (same afternoon): 131K + 2K 31.27 s, 4,191 input tok/s, 101.8 tok/s
+  decode; the agent profile 43.05 s, 3,045 and 111.5. The README headline therefore takes prefill from this
+  profile and decode from the agent profile.
+- It also out-prefills the 64 GB profile at the same chunk size (3,396). A likely cause, not measured: staging
+  DMAs rows that are already in the Humming layout, while `stream_v2.py` converts them on the GPU.
+
+The first 131K request after a start was 4.5–4.7 s slower in both profiles. The headline prompt is built from the
+overlay sources, so it changed with v0.5.0: compare profiles within one day's runs, not with September 29.
+
 ## Published runtime images
 
 From v0.3.0 on, `.github/workflows/publish-image.yml` builds `docker/Dockerfile`

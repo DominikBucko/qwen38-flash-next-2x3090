@@ -38,7 +38,7 @@ vLLM runtimes; pick the row for your hardware:
 |---|---|---:|---:|---:|
 | **1× RTX 3090 24 GB + 64 GB RAM** | **[qwen38-flash-next-3090](https://github.com/DominikBucko/qwen38-flash-next-3090)** | **up to 2,106 tok/s** | **43–51 tok/s** | 135,168 |
 | **2× RTX 3090 24 GB + 64 GB RAM** | **[qwen38-flash-next-2x3090, 64 GB profile](https://github.com/DominikBucko/qwen38-flash-next-2x3090#new-64-gb-ram-profile)** | **3,401–3,413 tok/s** | **84–89 tok/s** | 135,168 |
-| 2× RTX 3090 24 GB + 128 GB RAM | [qwen38-flash-next-2x3090](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it) | 3,029 tok/s | 109.8 tok/s | up to 262,144 |
+| 2× RTX 3090 24 GB + 128 GB RAM | [qwen38-flash-next-2x3090](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it) | up to 4,191 tok/s | up to 111.5 tok/s | up to 262,144 |
 
 ## New: two RTX 3090s with 64 GB of RAM
 
@@ -94,25 +94,28 @@ See the [benchmark report](https://github.com/DominikBucko/qwen38-flash-next-309
 [how it works](https://github.com/DominikBucko/qwen38-flash-next-3090/blob/main/docs/how-it-works.md) and the
 [FAQ](https://github.com/DominikBucko/qwen38-flash-next-3090/blob/main/docs/faq.md).
 
-## Two RTX 3090s: 3,029 tok/s prefill · 109.8 tok/s decode
+## Two RTX 3090s: up to 4,191 tok/s prefill · up to 111.5 tok/s decode
 
-**2× RTX 3090 + 128 GB RAM · v0.4.0 runtime (September 29)**
+**2× RTX 3090 + 128 GB RAM · v0.5.0 runtime (September 30)**
 
-With the new **agent 128K profile**, one request with 131,072 input tokens
-reaches the first token in **43.3 seconds** (**3,029 input tok/s**), then
-generates 2,048 tokens at **109.8 tok/s**. The **fast 256K profile** now reads
-the full 256K window (260,096 input tokens) in **90.8 seconds** (**2,865 input
-tok/s**), 8% faster than the September 25 release.
+One request with 131,072 input tokens and 2,048 output tokens, best of 2: the new **prefill profile**
+reaches the first token in **31.3 seconds** (**4,191 input tok/s**) and decodes at 101.8 tok/s. The **agent
+128K profile** takes 43.1 s (3,045 input tok/s) and decodes at **111.5 tok/s**. The **fast 256K profile** reads
+the full 256K window (260,096 input tokens) in **90.8 seconds** (**2,865 input tok/s**).
 
 | Profile | Input + output tokens | First token | Input tok/s | Decode tok/s |
 |---|---:|---:|---:|---:|
-| Agent 128K, best of 2 | 131,072 + 2,048 | **43.3 s** | **3,029** | **109.8** |
-| Fast 256K, 3 runs | 131,072 + 2,048 | 45.0–46.0 s | 2,852–2,916 | 98.9–101.9 |
-| Fast 256K, 3 runs | 260,096 + 2,048 | **90.8 s** | **2,864–2,865** | 94.0–98.3 |
+| Prefill (8K chunks, hot88), best of 2 | 131,072 + 2,048 | **31.3 s** | **4,191** | 101.8 |
+| Agent 128K (4K chunks, hot100), best of 2 | 131,072 + 2,048 | 43.1 s | 3,045 | **111.5** |
+| Fast 256K, 3 runs (September 29) | 131,072 + 2,048 | 45.0–46.0 s | 2,852–2,916 | 98.9–101.9 |
+| Fast 256K, 3 runs (September 29) | 260,096 + 2,048 | **90.8 s** | **2,864–2,865** | 94.0–98.3 |
 
-This is a **runtime release**. Clone the GitHub repository and use
-`configs/fast-256k.env` or `configs/agent-128k.env`, or pull the prebuilt
-`ghcr.io/dominikbucko/qwen38-flash-next-2x3090:v0.4.0` image (pin the digest
+The prefill profile streams experts in 8,192-token chunks and keeps 88 instead of 100 experts per layer on each
+GPU, so each decode step pulls more experts from system memory. Choose it when long prompts dominate the wait.
+
+Clone the GitHub repository and use `configs/fast-256k.env`, `configs/agent-128k.env` or
+`configs/agent-128k-prefill.env`, with a local build or the prebuilt
+`ghcr.io/dominikbucko/qwen38-flash-next-2x3090:v0.5.0` image (pin the digest
 from the release notes). The model weights on this page are unchanged.
 
 v0.4.0 fixes a KV-cache leak that kept one recurrent-state block per prefill
@@ -127,7 +130,8 @@ Decode depends on free RAM: the runtime keeps about 60 GB of expert weights and
 the 51.2 GB PLE table in system memory. Input tok/s means input tokens / time to
 first token. See the
 [fix report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-28/README.md),
-the [agent profile report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-29/README.md)
+the [agent profile report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-29/README.md),
+the [prefill profile results](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-30/README.md#prefill-profile-for-128-gb-machines)
 and the [September 25 results](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-25/README.md).
 
 ## Setup on two GPUs

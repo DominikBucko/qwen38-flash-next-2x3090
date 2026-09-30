@@ -1,8 +1,8 @@
 # Qwen3.8-Flash-Next on 2× RTX 3090
 
-<h2 align="center">3,029 tok/s prefill · 109.8 tok/s decode</h2>
+<h2 align="center">Up to 4,191 tok/s prefill · up to 111.5 tok/s decode</h2>
 <p align="center"><strong>Up to 262,144-token context · 2× RTX 3090 (24 GB) · 128 GB system memory</strong></p>
-<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, with the <a href="configs/agent-128k.env">agent 128K profile</a>. The <a href="configs/fast-256k.env">fast 256K profile</a> reads a full 260,096-token window in 90.8 s (2,865 input tok/s).</p>
+<p align="center">One request: 131,072 input tokens, then 2,048 output tokens, best of 2. Prefill with the new <a href="configs/agent-128k-prefill.env">prefill profile</a> (31.3 s to first token), decode with the <a href="configs/agent-128k.env">agent 128K profile</a>. The <a href="configs/fast-256k.env">fast 256K profile</a> reads a full 260,096-token window in 90.8 s (2,865 input tok/s).</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
 > **Only 64 GB of RAM?** The new [64 GB profile](#new-64-gb-ram-profile) runs the same two cards with half the
@@ -19,6 +19,30 @@ the GPUs, and uses a small MTP3 drafter to recover decode speed.
 The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE) combines Intel's AutoRound W4A16 target with FP8 PLE/ngram
 tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
+
+## New: prefill profile
+
+[`configs/agent-128k-prefill.env`](configs/agent-128k-prefill.env) is the agent 128K profile with 8,192-token
+prefill chunks instead of 4,096. Every chunk streams all cold experts over PCIe once, so bigger chunks halve that
+traffic on long prompts. The VRAM they need comes from the expert cache: 88 instead of 100 experts per layer and
+GPU (with 100, 8K chunks run out of VRAM), so decode pulls more experts from system memory. Same image, same day,
+two runs each:
+
+| Profile | 131K + 2K: first token | Input tok/s | Decode tok/s | 8K + 2K: input tok/s | Decode tok/s |
+|---|---:|---:|---:|---:|---:|
+| **Prefill** (8K chunks, hot88) | **31.3–36.0 s** | **3,643–4,191** | 91.9–101.8 | **3,844–3,851** | 98.9–101.1 |
+| Agent 128K (4K chunks, hot100) | 43.1–47.6 s | 2,756–3,045 | **104.8–111.5** | 2,822–2,823 | **103.2–106.2** |
+
+The slower 131K run of each profile is the first request after a start. Choose the prefill profile when long
+prompts dominate the wait, and the agent profile when long outputs do. Both limit requests to 135,168 tokens, one
+at a time, and need the same host as the fast 256K profile. Enable it with:
+
+```bash
+cat configs/agent-128k-prefill.env >> .env
+make serve
+```
+
+See the [prefill profile results](benchmarks/2026-09-30/README.md#prefill-profile-for-128-gb-machines).
 
 ## New: 64 GB RAM profile
 
@@ -39,7 +63,8 @@ checkpoint on NVMe.
 Prefill is faster than with the 128 GB agent profile only because of the larger prefill chunks. Every chunk streams
 all of a GPU's cold experts once, and keeping 88 instead of 100 experts per layer on each GPU leaves the VRAM for
 8,192-token chunks instead of 4,096. With 4,096 this profile prefills 131K at 2,754 tok/s, a little below the agent
-profile. Decode is about a quarter slower and depends on CPU memory bandwidth. Requests are limited to 135,168
+profile; the [prefill profile](#new-prefill-profile) gives the 128 GB machines the same 8K chunks. Decode is about a
+quarter slower and depends on CPU memory bandwidth. Requests are limited to 135,168
 tokens, one at a time. CUDA P2P is not needed. Enable it with:
 
 ```bash
@@ -52,7 +77,7 @@ the [64 GB section of the memory guide](docs/memory.md#64-gb-ram-the-2x3090-64gb
 [benchmark report](benchmarks/2026-09-30/README.md). The benchmark host runs both cards at PCIe ×16; desktop
 boards often split them ×8/×8 (untested, see the report).
 
-## New: September 29 runtime (v0.4.0)
+## September 29 runtime (v0.4.0)
 
 **Long prompts are 6–8% faster to first token.** On async-scheduled profiles, the
 KV cache leaked one recurrent-state block per prefill chunk in each Mamba layer
@@ -262,6 +287,8 @@ For agent work that stays under 128K, use [`configs/agent-128k.env`](configs/age
 instead. It has the same requirements. The context is 135,168 tokens, and the
 KV memory this frees holds 16 more hot experts per GPU: about 110 tok/s decode
 and 3,000 input tok/s on a 131,072-token prompt ([results](benchmarks/2026-09-29/README.md)).
+[`configs/agent-128k-prefill.env`](configs/agent-128k-prefill.env) trades some of that decode for up to 4,191
+input tok/s ([results](benchmarks/2026-09-30/README.md#prefill-profile-for-128-gb-machines)).
 
 Image inputs are optional. See the [vision profile and request example](docs/vision.md).
 
@@ -306,6 +333,7 @@ upload commands.
 
 The small JSON summaries are public:
 
+- [September 30 prefill and 64 GB profile results](benchmarks/2026-09-30/summary.json)
 - [September 29 agent 128K profile results](benchmarks/2026-09-29/summary.json)
 - [September 28 state-block fix A/B and validation](benchmarks/2026-09-28/summary.json)
 - [September 25 fast 256K runtime results](benchmarks/2026-09-25/summary.json)
