@@ -1,10 +1,13 @@
-# 64 GB RAM profile — September 30
+# 64 GB RAM profile and prefill profile — September 30
 
 **3,410 tok/s prefill and 84 tok/s decode on a 131K-token prompt, with 64 GB of system RAM**: the new
 [`configs/2x3090-64gb.env`](../../configs/2x3090-64gb.env) profile on two RTX 3090s (issue #27). Prefill is
 faster than the 128 GB agent profile (3,029 tok/s) only because this profile has the VRAM for 8,192-token prefill
 chunks ([why](#why-prefill-is-faster-than-with-the-128-gb-agent-profile)); decode is about a quarter slower (~110
 tok/s there).
+
+The same 8K chunks speed up the 128 GB machines: the new [prefill profile](#prefill-profile-for-128-gb-machines)
+reaches 4,191 tok/s on the README's 131K benchmark (31.3 s to first token), with each decode step 10–14% slower.
 
 The profile does not keep a pinned copy of every expert in RAM. Each GPU owns its 88 most-used experts per layer
 outright; the other 168 of its half live once in a RAM arena (38 GiB for both GPUs). During decode a CPU thread
@@ -94,11 +97,51 @@ five regression runs below):
 | 64 GB profile, `MAX_NUM_BATCHED_TOKENS=4096` | 1,135 / 73.9 | 2,732 / 80.5 | 2,754 / 85.9 | 2,551 / 77.8 |
 | Agent 128K profile, 4,096-token chunks (default) | 977–1,025 | 2,531–2,735 | 2,907–2,964 | 2,499–2,530 |
 | Agent 128K profile, `MAX_NUM_BATCHED_TOKENS=8192` | out of VRAM | | | |
+| Same, with 88 cached experts: the [prefill profile](#prefill-profile-for-128-gb-machines), 2 runs | 1,136–1,170 | 3,196–3,276 | 3,884–3,912 | 3,246–3,251 |
 
-(prefill / decode tok/s; prefill only for the agent range.) With 4,096-token chunks this profile needs 47.6 s
+(prefill / decode tok/s; prefill only for the agent rows.) With 4,096-token chunks this profile needs 47.6 s
 instead of 38.6 s for the 131K prompt and prefills at or slightly below the agent profile; decode does not change.
-The agent profile with 8,192-token chunks ran out of VRAM on its first request (80 MiB requested, 34 MiB free).
-Its VRAM goes to the larger expert cache, which its decode uses.
+The agent profile with 8,192-token chunks ran out of VRAM on its first request (80 MiB requested, 34 MiB free):
+its VRAM goes to the larger expert cache, which its decode uses. With 88 cached experts per layer it fits, and it
+then prefills faster than this profile. A likely reason, not measured: the 128 GB path copies experts that are
+already in the GPU kernel's layout, while this profile converts them on the GPU.
+
+## Prefill profile for 128 GB machines
+
+[`configs/agent-128k-prefill.env`](../../configs/agent-128k-prefill.env) is the agent 128K profile with
+`MAX_NUM_BATCHED_TOKENS=8192` and `VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88`: 12 fewer cached experts per layer, about
+1.36 GiB per card, pay for the larger chunks. Every run used the published v0.5.0 image and all 128 GB of RAM (no
+balloon, no memory limit, and the temporary swap file the 128 GB loader needs).
+
+With the benchmark of this report (prefill tok/s / decode tok/s / ms per verify step):
+
+| Run | 4K + 256 (first request) | 32K + 512 | 131K + 512 | 8K + 1,024 |
+|---|---|---|---|---|
+| Prefill profile, run 1 | 1,170 / 88.7 / 36.6 | 3,196 / 106.5 / 27.6 | 3,884 / 108.8 / 29.4 | 3,251 / 109.2 / 29.0 |
+| Prefill profile, run 2 | 1,136 / 88.1 / 37.9 | 3,276 / 110.7 / 27.8 | 3,912 / 108.7 / 29.0 | 3,246 / 105.8 / 29.2 |
+| Agent 128K profile, the 5 regression runs below | 977–1,025 / 87.8–96.3 / 32.7–38.2 | 2,531–2,735 / 115.5–123.7 / 24.4–25.6 | 2,907–2,964 / 119.0–126.5 / 26.2–26.6 | 2,499–2,530 / 122.4–130.2 / 24.8–26.1 |
+
+Prefill rose 20–33% on the 8K–131K prompts: the 131K prompt reached its first token in 33.5–33.7 s instead of
+44.2–45.1 s. A verify step cost 10–14% more (the first request 4–8% more), because more experts come from system
+memory each step. Draft acceptance stayed in the same range (1.9–2.3 of 3 tokens).
+
+With the README's headline benchmark (`scripts/benchmark_serving.py --prompt-style repo-chat`, 131,072 + 2,048 and
+8,192 + 2,048, two runs each, no warmup, the prompt built from this tree), both profiles on the same afternoon:
+
+| Profile | 131K + 2K: first token | Input tok/s | Decode tok/s | 8K + 2K: first token | Input tok/s | Decode tok/s |
+|---|---:|---:|---:|---:|---:|---:|
+| Prefill profile | 35.98 / **31.27 s** | 3,643 / **4,191** | 91.9 / 101.8 | 2.13 / 2.13 s | 3,851 / 3,844 | 98.9 / 101.1 |
+| Agent 128K profile | 47.56 / 43.05 s | 2,756 / 3,045 | 104.8 / **111.5** | 2.90 / 2.90 s | 2,823 / 2,822 | 103.2 / 106.2 |
+
+(run 1 / run 2.) Run 1 of each profile is the first request after the start and was slower in both. The prompt
+is built from the overlay sources, which changed in v0.5.0, so it differs from the one behind the September 29
+numbers (43.3 s, 3,029 and 109.8 tok/s): compare the two profiles here with each other.
+
+GPU memory peaked at 23,799–24,033 MiB per card of 24,576 (agent profile: 23,987–23,991), CPU Tctl at 84 °C and
+the GPUs at 76 °C. No request was preempted, and the smoke test passed after every run. On a card that also drives
+a display, lower the cache further (each slot removed saves about 116 MiB per GPU; not tested). The weights, KV
+precision and expert math are unchanged. As with any hot-set size, kernel tile choices can depend on the local
+expert count, which changes floating-point reduction order; no separate quality run was made.
 
 ## Regression check of the 128 GB profiles
 
@@ -126,4 +169,5 @@ kernels) and 456 s; v0.4.0's took 457–459 s.
 ## Files
 
 - [`summary.json`](summary.json): every run above.
-- [`raw/`](raw/): the benchmark client output of each run.
+- [`raw/`](raw/): the benchmark client output of each run; `raw/headline-*.json.gz` are the
+  `scripts/benchmark_serving.py` reports of the headline benchmark.

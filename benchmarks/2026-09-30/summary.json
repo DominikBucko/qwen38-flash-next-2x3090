@@ -793,6 +793,225 @@
    "raw": null,
    "results": [],
    "error": "CUDA out of memory on the first request (4,127 prompt tokens): 80 MiB requested with 33.81 MiB free on GPU 1 (23.45 GiB in use, 11.35 GiB of it allocated by PyTorch); the server answered HTTP 500"
+  },
+  {
+   "id": "128gb-agent-prefill-run1",
+   "kind": "prefill-profile",
+   "description": "128 GB prefill profile (configs/agent-128k-prefill.env), published v0.5.0 image, run 1",
+   "container_cpus": "all 64 CPUs",
+   "overrides": {
+    "MAX_NUM_BATCHED_TOKENS": "8192",
+    "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "88"
+   },
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+   "raw": "raw/128gb-agent-prefill-run1.json",
+   "results": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 3.527,
+     "total_s": 6.404,
+     "prefill_tok_s": 1170.0,
+     "decode_tok_s": 88.65,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.241
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 10.264,
+     "total_s": 15.062,
+     "prefill_tok_s": 3195.6,
+     "decode_tok_s": 106.5,
+     "preemptions": 0.0,
+     "accepted_per_draft": 1.943
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 33.749,
+     "total_s": 38.448,
+     "prefill_tok_s": 3884.5,
+     "decode_tok_s": 108.75,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.193
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 2.528,
+     "total_s": 11.896,
+     "prefill_tok_s": 3251.0,
+     "decode_tok_s": 109.2,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.167
+    }
+   ]
+  },
+  {
+   "id": "128gb-agent-prefill-run2",
+   "kind": "prefill-profile",
+   "description": "128 GB prefill profile (configs/agent-128k-prefill.env), published v0.5.0 image, run 2",
+   "container_cpus": "all 64 CPUs",
+   "overrides": {
+    "MAX_NUM_BATCHED_TOKENS": "8192",
+    "VLLM_WNA16_STATIC_HOT_CACHE_SIZE": "88"
+   },
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+   "raw": "raw/128gb-agent-prefill-run2.json",
+   "results": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 3.631,
+     "total_s": 6.526,
+     "prefill_tok_s": 1136.5,
+     "decode_tok_s": 88.08,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.338
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 10.01,
+     "total_s": 14.626,
+     "prefill_tok_s": 3276.5,
+     "decode_tok_s": 110.7,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.078
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 33.512,
+     "total_s": 38.212,
+     "prefill_tok_s": 3912.0,
+     "decode_tok_s": 108.72,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.153
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 2.532,
+     "total_s": 12.201,
+     "prefill_tok_s": 3245.9,
+     "decode_tok_s": 105.8,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.094
+    }
+   ]
   }
- ]
+ ],
+ "prefill_profile": "configs/agent-128k-prefill.env (configs/agent-128k.env with MAX_NUM_BATCHED_TOKENS=8192, VLLM_WNA16_STATIC_HOT_CACHE_SIZE=88)",
+ "headline_runs": {
+  "protocol": "scripts/benchmark_serving.py --prompt-style repo-chat --runs 2 --warmup 0, 131,072 + 2,048 and 8,192 + 2,048 (the README headline benchmark); prompt built from the v0.5.0 overlay sources; same image and afternoon for both profiles",
+  "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+  "runs": [
+   {
+    "profile": "configs/agent-128k-prefill.env",
+    "input_tokens": 131072,
+    "output_tokens": 2048,
+    "raw": "raw/headline-agent-prefill-131k.json.gz",
+    "measured": [
+     {
+      "run": 1,
+      "ttft_s": 35.983,
+      "input_tok_s": 3642.6,
+      "decode_tok_s": 91.94,
+      "status": "ok"
+     },
+     {
+      "run": 2,
+      "ttft_s": 31.271,
+      "input_tok_s": 4191.4,
+      "decode_tok_s": 101.84,
+      "status": "ok"
+     }
+    ]
+   },
+   {
+    "profile": "configs/agent-128k-prefill.env",
+    "input_tokens": 8192,
+    "output_tokens": 2048,
+    "raw": "raw/headline-agent-prefill-8k.json.gz",
+    "measured": [
+     {
+      "run": 1,
+      "ttft_s": 2.127,
+      "input_tok_s": 3850.9,
+      "decode_tok_s": 98.95,
+      "status": "ok"
+     },
+     {
+      "run": 2,
+      "ttft_s": 2.131,
+      "input_tok_s": 3844.5,
+      "decode_tok_s": 101.13,
+      "status": "ok"
+     }
+    ]
+   },
+   {
+    "profile": "configs/agent-128k.env",
+    "input_tokens": 131072,
+    "output_tokens": 2048,
+    "raw": "raw/headline-agent-131k.json.gz",
+    "measured": [
+     {
+      "run": 1,
+      "ttft_s": 47.557,
+      "input_tok_s": 2756.1,
+      "decode_tok_s": 104.79,
+      "status": "ok"
+     },
+     {
+      "run": 2,
+      "ttft_s": 43.048,
+      "input_tok_s": 3044.8,
+      "decode_tok_s": 111.49,
+      "status": "ok"
+     }
+    ]
+   },
+   {
+    "profile": "configs/agent-128k.env",
+    "input_tokens": 8192,
+    "output_tokens": 2048,
+    "raw": "raw/headline-agent-8k.json.gz",
+    "measured": [
+     {
+      "run": 1,
+      "ttft_s": 2.902,
+      "input_tok_s": 2823.2,
+      "decode_tok_s": 103.21,
+      "status": "ok"
+     },
+     {
+      "run": 2,
+      "ttft_s": 2.903,
+      "input_tok_s": 2822.2,
+      "decode_tok_s": 106.21,
+      "status": "ok"
+     }
+    ]
+   }
+  ]
+ }
 }
