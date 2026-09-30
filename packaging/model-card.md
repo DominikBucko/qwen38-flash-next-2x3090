@@ -17,19 +17,82 @@ tags:
   - 256k-context
   - 128k-context
   - rtx-3090
+  - single-gpu
   - dual-gpu
+  - 24gb-vram
+  - 64gb-ram
+  - consumer-gpu
   - cpu-offload
+  - moe
+  - int8-kv-cache
   - local-llm
   - w4a16
 ---
 
-# Qwen3.8-Flash-Next on dual RTX 3090: W4A16 + FP8 PLE + MTP3
+# Qwen3.8-Flash-Next on one or two RTX 3090s with 64 GB or 128 GB RAM: W4A16 + FP8 PLE + MTP3
 
-Run **Qwen 3.8 Flash Next locally on two RTX 3090 24 GB GPUs and 128 GB RAM**.
-Start with the **[GitHub quickstart and pinned runtime](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it)**;
-the weights require its custom vLLM overlay.
+Run **Qwen 3.8 Flash Next locally** on one or two 24 GB GPUs. The weights on this page need one of two custom
+vLLM runtimes; pick the row for your hardware:
 
-## New: 3,029 tok/s prefill · 109.8 tok/s decode
+| Hardware | Runtime (GitHub) | Prefill, 131K prompt | Decode | Context |
+|---|---|---:|---:|---:|
+| **1× RTX 3090 24 GB + 64 GB RAM** | **[qwen38-flash-next-3090](https://github.com/DominikBucko/qwen38-flash-next-3090)** | **up to 2,106 tok/s** | **43–51 tok/s** | 135,168 |
+| **2× RTX 3090 24 GB + 64 GB RAM** | **[qwen38-flash-next-2x3090, 64 GB profile](https://github.com/DominikBucko/qwen38-flash-next-2x3090#new-64-gb-ram-profile)** | **3,401–3,413 tok/s** | **84–89 tok/s** | 135,168 |
+| 2× RTX 3090 24 GB + 128 GB RAM | [qwen38-flash-next-2x3090](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it) | 3,029 tok/s | 109.8 tok/s | up to 262,144 |
+
+## New: two RTX 3090s with 64 GB of RAM
+
+The [64 GB profile](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/configs/2x3090-64gb.env)
+of the two-GPU runtime (v0.5.0) runs **both cards with 64 GB of system RAM**. The 128 GB profiles keep a pinned
+copy of every expert and the PLE table in RAM. Here each GPU owns its 88 most-used experts per layer outright,
+and the other experts of its half live once in RAM (38 GiB for both GPUs). During decode a CPU thread pool per
+GPU computes them while the GPU takes a share over PCIe; prefill streams each GPU's half. The FP8 PLE table is
+read in place from these files on NVMe.
+
+| Two RTX 3090s, machine limited to 64 GB RAM, 3 runs | First token | Prefill | Decode |
+|---|---:|---:|---:|
+| 131,099 + 512 tokens | 38.4–38.5 s | **3,401–3,413 tok/s** | **84.2–88.8 tok/s** |
+| 32,799 + 512 | 10.2–10.3 s | 3,200–3,211 tok/s | 77.0–83.9 tok/s |
+| 8,218 + 1,024 | 2.6 s | 3,114–3,146 tok/s | 78.2–79.7 tok/s |
+
+With the server restricted to 12 CPU cores on 2 CCDs, decode ran at 71–81 tok/s. Setup: clone the GitHub
+repository, then `cat configs/2x3090-64gb.env >> .env && make serve`. No CUDA P2P and no swap are needed. See
+the [64 GB benchmark report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-30/README.md).
+
+## New: a single RTX 3090 with 64 GB of RAM
+
+**[github.com/DominikBucko/qwen38-flash-next-3090](https://github.com/DominikBucko/qwen38-flash-next-3090)**
+serves this checkpoint on **one RTX 3090 (24 GB) and 64 GB of system RAM**, with a 128K context. The GPU keeps
+the attention and dense weights, the 32 most-used experts of every layer and an INT8 KV cache (141,504 tokens in
+3.05 GB); **the CPU computes the other experts straight from RAM** during decode, while prefill streams them
+through the GPU. The FP8 PLE table is read in place from these files on NVMe. The weights are unchanged.
+
+| One RTX 3090, machine limited to 64 GB RAM (2 runs) | First token | Prefill | Decode |
+|---|---:|---:|---:|
+| 131,099 + 512 tokens | 62.2 / 90.3 s | **2,106** / 1,451 tok/s | **47.4** / 43.3 tok/s |
+| 32,799 + 512 | 15.3 / 14.8 s | 2,141 / 2,219 tok/s | 50.3 / 49.5 tok/s |
+| 8,218 + 1,024 | 5.2 / 5.7 s | 1,570 / 1,452 tok/s | 49.1 / 48.5 tok/s |
+
+Some prefill requests take a slower path (~1,450 instead of ~2,100 tok/s); see the known issue in the
+benchmark report. Decode depends mainly on RAM bandwidth: with the server restricted to 16 cores of the benchmark CPU it ran at
+39–47 tok/s, with 8 cores at 34–36 tok/s. Quick start:
+
+```bash
+hf download albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE \
+  --revision ef554143369a706525336f6b42a09094835dc077 --local-dir /models/qwen38-flash-next
+git clone https://github.com/DominikBucko/qwen38-flash-next-3090.git && cd qwen38-flash-next-3090
+cp .env.example .env    # set MODEL_DIR
+make build-image && make serve
+```
+
+Or skip the build with the published image:
+`IMAGE=ghcr.io/dominikbucko/qwen38-flash-next-3090@sha256:7f176605b59c462af21b1b62fd854f9f3cca96e3d11a295581297483d45490a3 make serve`.
+
+See the [benchmark report](https://github.com/DominikBucko/qwen38-flash-next-3090/blob/main/benchmarks/2026-09-30/README.md),
+[how it works](https://github.com/DominikBucko/qwen38-flash-next-3090/blob/main/docs/how-it-works.md) and the
+[FAQ](https://github.com/DominikBucko/qwen38-flash-next-3090/blob/main/docs/faq.md).
+
+## Two RTX 3090s: 3,029 tok/s prefill · 109.8 tok/s decode
 
 **2× RTX 3090 + 128 GB RAM · v0.4.0 runtime (September 29)**
 
@@ -65,7 +128,7 @@ first token. See the
 the [agent profile report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-29/README.md)
 and the [September 25 results](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/benchmarks/2026-09-25/README.md).
 
-## Setup
+## Setup on two GPUs
 
 [Hardware requirements, 4090 guidance and community 5090 report](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/docs/hardware.md)
 · [Performance tuning and public benchmark client](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/docs/performance.md)
@@ -98,6 +161,9 @@ payload. `hybrid_sources.json`, `runtime/mtp-int4-g32/compact_sources.json`, and
 
 This is not a stock Transformers checkpoint. Use the matching GitHub runtime
 release and the digest-pinned vLLM image recorded in `runtime/repro.lock.json`.
+For one GPU, use [qwen38-flash-next-3090](https://github.com/DominikBucko/qwen38-flash-next-3090)
+(INT8 KV cache, CPU cold experts, 135,168-token context); the rest of this section
+describes the two-GPU runtime.
 The current GitHub default uses BF16 KV, TP2+EP2, UVA expert offload, an
 84-expert GPU hot cache, prefix caching, and MTP3. The original bundled
 `runtime/README.md` describes the older hot88 release; use the current GitHub
