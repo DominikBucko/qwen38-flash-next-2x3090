@@ -18,7 +18,7 @@ def warmup_once(method, layer):
     cache = method._static_hot_cache
     if cache is None or not cache.dynamic_lru:
         return
-    if cache.hot_map.numel() != 512 or not 64 <= cache.slot_global_ids.numel() <= 128:
+    if cache.hot_map.numel() != 512 or not 16 <= cache.slot_global_ids.numel() <= 128:
         raise RuntimeError('unchecked LRU warmup geometry')
     if method._static_hot_cache_max_tokens != 16:
         raise RuntimeError('unchecked LRU token threshold')

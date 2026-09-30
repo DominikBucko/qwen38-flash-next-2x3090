@@ -246,6 +246,14 @@ class PleOffloadWorker:
     ) -> None:
         """Load PLE weights, accept registrations, and run the request loop."""
         decorate_logs("PleOffloadWorker")
+        if os.environ.get("QWEN38_CPU_EXPERTS") == "1":
+            # Keep PLE lookups off the SMT siblings of the CPU expert pool's cores (vllm/qwen38_host.py).
+            from vllm import qwen38_host
+            os.sched_setaffinity(0, set(qwen38_host.main_cpus()))
+            # The row gathers are page-fault bound (MADV_WILLNEED already overlaps the NVMe reads), so a few
+            # intra-op threads suffice; one spinning OpenMP thread per CPU took the cores that the GPU worker
+            # needs to issue prefill kernels on machines with 16 cores or fewer.
+            torch.set_num_threads(max(1, int(os.environ.get("QWEN38_PLE_THREADS", "4"))))
         ready_reader, ready_writer = ready_pipe
         ready_reader.close()
         shutdown_event = threading.Event()
