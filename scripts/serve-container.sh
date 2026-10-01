@@ -92,7 +92,14 @@ if (( hot_only > 0 )); then
   export QWEN38_PLE_MMAP=1 QWEN38_PLE_MMAP_DIR="$model" QWEN38_PLE_PREFAULT=0
   export QWEN38_STREAM_STAGE=0 QWEN38_STAGE_OVERLAP=0
   export VLLM_WNA16_DYNAMIC_LRU=0 VLLM_WNA16_MIXED_VMM_HOT_CACHE=0 VLLM_WNA16_STATIC_HOT_CACHE_SIZE=0
-  offload_args=()
+  # Disk KV tier with cross-restart persistence, opt-in via KV_TIER_JSON
+# (a full --kv-transfer-config document). See docs/kv-tier-persistence.md.
+kv_transfer_arg=()
+if [[ -n "${KV_TIER_JSON:-}" ]]; then
+  kv_transfer_arg=(--kv-transfer-config "$KV_TIER_JSON")
+fi
+
+offload_args=()
   # Host plan: resolve the "auto" CPU pools (one per GPU) and arena size once for every serving process.
   host_py=${QWEN38_HOST_PY:-$(python3 -c 'import importlib.util, os; print(os.path.join(os.path.dirname(importlib.util.find_spec("vllm").origin), "qwen38_host.py"))')}
   while IFS='=' read -r key value; do
@@ -118,6 +125,7 @@ exec vllm serve "$model" \
   --safetensors-load-strategy lazy \
   --max-parallel-loading-workers "$MAX_PARALLEL_LOADING_WORKERS" \
   ${offload_args[@]+"${offload_args[@]}"} \
+  ${kv_transfer_arg[@]+"${kv_transfer_arg[@]}"} \
   --max-model-len "$MAX_MODEL_LEN" \
   --max-num-seqs "$MAX_NUM_SEQS" \
   --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
