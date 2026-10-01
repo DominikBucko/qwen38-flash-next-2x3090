@@ -105,6 +105,13 @@ else
   offload_args=(--offload-backend uva --cpu-offload-gb "$CPU_OFFLOAD_GB" --cpu-offload-params experts)
 fi
 
+# Optional Hugging Face config overrides, used by the YaRN extended-context
+# profile in configs/yarn-455k.env. Off unless HF_OVERRIDES_JSON is set.
+hf_overrides_arg=()
+if [[ -n "${HF_OVERRIDES_JSON:-}" ]]; then
+  hf_overrides_arg=(--hf-overrides "$HF_OVERRIDES_JSON")
+fi
+
 exec vllm serve "$model" \
   --served-model-name "$SERVED_MODEL_NAME" \
   --host 0.0.0.0 --port "$PORT" \
@@ -128,6 +135,7 @@ exec vllm serve "$model" \
   --mamba-cache-mode align \
   "$async_scheduling_arg" \
   ${custom_all_reduce_arg:+"$custom_all_reduce_arg"} \
+  ${hf_overrides_arg[@]+"${hf_overrides_arg[@]}"} \
   --compilation-config '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}' \
   --trust-remote-code \
   --enable-auto-tool-choice \
