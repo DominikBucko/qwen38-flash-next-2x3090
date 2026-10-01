@@ -84,6 +84,35 @@ serving-process CPUs and the arena size. Settings that matter on other machines:
 One request at a time (`MAX_NUM_SEQS=1`): the CPU decode path handles one sequence of up to four tokens per
 step. See the [64 GB benchmark report](../benchmarks/2026-09-30/README.md) for measured speed and limits.
 
+## PLE table arms: BF16 fidelity and disk-backed residency (opt-in)
+
+The default keeps the FP8 PLE table resident in host RAM, owned by the PLE
+worker. Two opt-in arms change that trade, inert unless their env vars are set:
+
+- `PLE_BF16_TABLE=1` serves the checkpoint's original BF16 n-gram table instead
+  of requantizing to the published FP8 E4M3FN + scale pair. This is the
+  quality side of the trade — it doubles the table to about 95 GiB, so pair it
+  with the disk arm or a large-RAM box. Positioning only: the table is never
+  requantized, so the published FP8 artifacts stay untouched. As always for a
+  dtype change, run your own retrieval evaluation before generalizing; our
+  retrieval spot-checks improved but formal evals are not ours to publish here.
+- `VLLM_PLE_DISK_OFFLOAD_DIR=/path` swaps each layer's n-gram table parameter
+  for a mapping of a file on NVMe (`MADV_RANDOM`; gathers are random-access and
+  readahead only evicts useful pages). First boot writes the table through and
+  records a `.done.json` (shape + dtype); later boots reuse the file and remap
+  copy-on-write. A pre-existing `.bin` whose size contradicts the model aborts
+  the boot instead of truncating it. Host-RAM pressure drops to a page-cache
+  question, which is what the 64 GB class of rigs (issue #27) needs; page-cache
+  behavior on cold access patterns is exactly the risk called out in
+  "Why FP8 PLE instead of disk or INT4", so treat this as a lever to benchmark,
+  not a default.
+
+Both arms compose with the FP8 path in `v1/ple_offload/worker.py` unchanged for
+every boot that does not set them. A third, more experimental arm
+(`VLLM_PLE_PACKED=1`) transfers group16 int4/nvfp4 tables as raw nibbles for
+GPU-side dequant; it is code-complete in the worker but has not been driven in
+production on our lane since the v0.5.0 runtime — review it with that in mind.
+
 ## GPU memory
 
 The default 256K profile uses hot84. Hot88 is an optional, tighter profile.
