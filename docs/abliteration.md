@@ -1,4 +1,4 @@
-# Refusal removal (abliteration)
+# Uncensored mode (abliteration)
 
 `QWEN38_ABLITERATION` removes one refusal direction from the model at runtime. With
 `QWEN38_ABLITERATION=orcarouter`, the served model behaves like
