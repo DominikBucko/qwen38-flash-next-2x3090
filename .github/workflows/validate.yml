@@ -27,6 +27,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_prefill_progress.py' -v
           python -m unittest discover -s tests -p 'test_fast_runtime_chart.py' -v
           python -m unittest discover -s tests -p 'test_host_plan.py' -v
+          python -m unittest discover -s tests -p 'test_abliteration_cpu.py' -v
       - name: Check Python syntax
         run: >-
           python -m compileall -q

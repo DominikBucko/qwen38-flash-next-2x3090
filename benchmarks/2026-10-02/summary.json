@@ -1,0 +1,201 @@
+{
+ "date": "2026-10-02",
+ "hardware": "2x RTX 3090 24 GB (PCIe 4.0 x16 each), Threadripper PRO 5975WX, 8x16 GB DDR4-3200",
+ "direction": "configs/abliteration/orcarouter.json (orcarouter/Qwen3.8-Flash-Next-Uncensored)",
+ "refusal_check": "8 mild borderline requests + 2 neutral controls, greedy, thinking off, 160 tokens; regex plus one reviewed false negative",
+ "bench_protocol": "4096:256, 32768:512, 131072:512, 8192:1024 after the refusal check (scripts/bench.py of qwen38-flash-next-3090)",
+ "runs": [
+  {
+   "id": "agent-128k-off",
+   "profile": "configs/agent-128k.env",
+   "QWEN38_ABLITERATION": null,
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387",
+   "ram": "all 128 GB",
+   "refused_borderline": 7,
+   "borderline_total": 8,
+   "controls_refused": 0,
+   "bench": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 2.882,
+     "total_s": 5.233,
+     "prefill_tok_s": 1432.0,
+     "decode_tok_s": 108.47,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.2
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 12.192,
+     "total_s": 16.315,
+     "prefill_tok_s": 2690.1,
+     "decode_tok_s": 123.96,
+     "preemptions": 0.0,
+     "accepted_per_draft": 1.988
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 45.066,
+     "total_s": 49.133,
+     "prefill_tok_s": 2909.1,
+     "decode_tok_s": 125.64,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.397
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 3.279,
+     "total_s": 11.678,
+     "prefill_tok_s": 2506.5,
+     "decode_tok_s": 121.8,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.119
+    }
+   ],
+   "raw": {
+    "bench": "raw/agent-128k-off-bench.json",
+    "refusal": "raw/agent-128k-off-refusal.json"
+   }
+  },
+  {
+   "id": "agent-128k-on",
+   "profile": "configs/agent-128k.env",
+   "QWEN38_ABLITERATION": "orcarouter",
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387 + this tree's overlay",
+   "ram": "all 128 GB",
+   "refused_borderline": 0,
+   "borderline_total": 8,
+   "controls_refused": 0,
+   "bench": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 2.952,
+     "total_s": 5.27,
+     "prefill_tok_s": 1398.1,
+     "decode_tok_s": 110.02,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.253
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 12.316,
+     "total_s": 16.573,
+     "prefill_tok_s": 2663.1,
+     "decode_tok_s": 120.03,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.066
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 44.99,
+     "total_s": 49.127,
+     "prefill_tok_s": 2914.0,
+     "decode_tok_s": 123.51,
+     "preemptions": 0.0,
+     "accepted_per_draft": 1.971
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 3.243,
+     "total_s": 11.805,
+     "prefill_tok_s": 2534.0,
+     "decode_tok_s": 119.49,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.226
+    }
+   ],
+   "raw": {
+    "bench": "raw/agent-128k-on-bench.json",
+    "refusal": "raw/agent-128k-on-refusal.json"
+   }
+  },
+  {
+   "id": "64gb-on",
+   "profile": "configs/2x3090-64gb.env",
+   "QWEN38_ABLITERATION": "orcarouter",
+   "image": "ghcr.io/dominikbucko/qwen38-flash-next-2x3090@sha256:75adfc64ba1576b8a677f455d54891c152444e4bf43fbc37cb8f1885a8db3387 + this tree's overlay",
+   "ram": "64 GiB balloon, 56 GiB container",
+   "refused_borderline": 0,
+   "borderline_total": 8,
+   "controls_refused": 0,
+   "bench": [
+    {
+     "requested_input": 4096,
+     "requested_output": 256,
+     "prompt_tokens": 4127,
+     "completion_tokens": 256,
+     "ttft_s": 3.366,
+     "total_s": 6.378,
+     "prefill_tok_s": 1226.0,
+     "decode_tok_s": 84.68,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.241
+    },
+    {
+     "requested_input": 32768,
+     "requested_output": 512,
+     "prompt_tokens": 32799,
+     "completion_tokens": 512,
+     "ttft_s": 9.718,
+     "total_s": 16.171,
+     "prefill_tok_s": 3375.0,
+     "decode_tok_s": 79.19,
+     "preemptions": 0.0,
+     "accepted_per_draft": 1.943
+    },
+    {
+     "requested_input": 131072,
+     "requested_output": 512,
+     "prompt_tokens": 131099,
+     "completion_tokens": 512,
+     "ttft_s": 39.047,
+     "total_s": 44.98,
+     "prefill_tok_s": 3357.5,
+     "decode_tok_s": 86.13,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.436
+    },
+    {
+     "requested_input": 8192,
+     "requested_output": 1024,
+     "prompt_tokens": 8218,
+     "completion_tokens": 1024,
+     "ttft_s": 2.485,
+     "total_s": 15.66,
+     "prefill_tok_s": 3306.6,
+     "decode_tok_s": 77.65,
+     "preemptions": 0.0,
+     "accepted_per_draft": 2.157
+    }
+   ],
+   "raw": {
+    "bench": "raw/64gb-on-bench.json",
+    "refusal": "raw/64gb-on-refusal.json"
+   }
+  }
+ ]
+}

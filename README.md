@@ -77,6 +77,32 @@ the [64 GB section of the memory guide](docs/memory.md#64-gb-ram-the-2x3090-64gb
 [benchmark report](benchmarks/2026-09-30/README.md). The benchmark host runs both cards at PCIe ×16; desktop
 boards often split them ×8/×8 (untested, see the report).
 
+## New: opt-in refusal removal (abliteration)
+
+`QWEN38_ABLITERATION=orcarouter` gives the served model the behaviour of
+[orcarouter/Qwen3.8-Flash-Next-Uncensored](https://huggingface.co/orcarouter/Qwen3.8-Flash-Next-Uncensored)
+without new weights. That release removes one refusal direction `r` from every matrix that writes to the residual
+stream: `W' = W − r(rᵀW)`. The runtime applies the same projection to the outputs of those matrices instead,
+which for one direction is the same edit, so the published INT4 experts and every other weight stay as they are.
+
+| Same image and afternoon | Off | On |
+|---|---:|---:|
+| Mild borderline requests refused (fake review, lock picking, insult, …), agent 128K profile | 7 of 8 | 0 of 8 |
+| Neutral controls and smoke tests (math, tool call, code) | pass | pass |
+| 131K prefill, agent 128K profile | 2,909 tok/s | 2,914 tok/s |
+| Decode cost per verify step, agent 128K profile | 24.1–27.0 ms | 24.1–27.0 ms |
+
+The 64 GB profile behaves the same (0 of 8 refused, speed within 3% of its published runs). **This removes the
+model's safety refusals**: it follows requests the original model declines. Use it for research, red-teaming or
+your own use, and put your own safeguards in front of it before serving anyone else. It works with every profile
+and needs an image built from this tree (`make build-image`) until the next release image. Add to `.env`:
+
+```bash
+QWEN38_ABLITERATION=orcarouter
+```
+
+How the direction was recovered and verified, and the limits: [docs/abliteration.md](docs/abliteration.md).
+
 ## September 29 runtime (v0.4.0)
 
 **Long prompts are 6–8% faster to first token.** On async-scheduled profiles, the
@@ -333,6 +359,7 @@ upload commands.
 
 The small JSON summaries are public:
 
+- [October 2 runtime abliteration results](benchmarks/2026-10-02/summary.json)
 - [September 30 prefill and 64 GB profile results](benchmarks/2026-09-30/summary.json)
 - [September 29 agent 128K profile results](benchmarks/2026-09-29/summary.json)
 - [September 28 state-block fix A/B and validation](benchmarks/2026-09-28/summary.json)

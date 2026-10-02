@@ -56,6 +56,7 @@ from vllm.v1.attention.backends.short_conv_attn import (
 )
 from vllm.v1.attention.backends.utils import NULL_BLOCK_ID
 
+from . import abliteration
 from ..common.ple import copy_ple_embedding_shard_
 
 _MASK64 = (1 << 64) - 1
@@ -724,6 +725,7 @@ class Qwen3_8FlashNextPLELayer(nn.Module, MambaBase):
             quant_config=quant_config,
             prefix=f"{prefix}.value_proj",
         )
+        abliteration.register(self, self.hidden_size, model_config.dtype)
         norm_args = (
             self.hc_hidden_size,
             config.rms_norm_eps,
@@ -1429,6 +1431,7 @@ class Qwen3_8FlashNextPLELayer(nn.Module, MambaBase):
         embeddings = self._dequantize_embeddings(embeddings, hidden_states.dtype)
         key, _ = self.key_proj(embeddings)
         value, _ = self.value_proj(embeddings)
+        abliteration.project_(value, self._abliteration_r)
         token_count = hidden_states.shape[0]
         key = key.reshape(token_count, self.hc_count, self.hidden_size)
         query = hidden_states.reshape(token_count, self.hc_count, self.hidden_size)
