@@ -48,6 +48,7 @@ from vllm.transformers_utils.configs.qwen3_8_flash_next import (
 
 from .hyperconnection import GatedResidual, HyperConnectionConfig
 from .low_latency_gemm import enable_qwen38next_low_latency_gemm
+from . import abliteration
 from .model import (
     _HC_WEIGHTS_MAPPER,
     _QWEN38_FLASH_NEXT_IGNORED_MISSING_SUFFIXES,
@@ -185,6 +186,7 @@ class Qwen3_8FlashNextMultiTokenPredictor(nn.Module):
         self.hc_count = config.hc_count
 
         self.embed_tokens = VocabParallelEmbedding(self.vocab_size, self.hidden_size)
+        abliteration.register(self, self.hidden_size, model_config.dtype)
         draft_vllm_config = _make_draft_vllm_config(
             vllm_config,
             self.mtp_start_layer_idx,
@@ -272,7 +274,7 @@ class Qwen3_8FlashNextMultiTokenPredictor(nn.Module):
             buffer[:num_rows].copy_(selected)
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.embed_tokens(input_ids)
+        return abliteration.project_(self.embed_tokens(input_ids), self._abliteration_r)
 
     def forward(
         self,

@@ -76,6 +76,7 @@ from vllm.v1.attention.backends.registry import MambaAttentionBackendEnum
 from vllm.v1.kv_cache_interface import MambaSpec
 
 from ..config import Qwen3_8FlashNextConfig
+from . import abliteration
 from .hyperconnection import GatedResidual, HyperConnectionConfig
 from .low_latency_gemm import enable_qwen38next_low_latency_gemm
 from .ple_layer import Qwen3_8FlashNextPLELayer
@@ -279,6 +280,7 @@ class Qwen3_8FlashNextDecoderLayer(nn.Module):
             hc_config,
             prefix=maybe_prefix(prefix, "mlp_hyper_connection"),
         )
+        abliteration.register(self, config.hidden_size, model_config.dtype)
 
     def forward(
         self,
@@ -327,12 +329,14 @@ class Qwen3_8FlashNextDecoderLayer(nn.Module):
             )
         else:
             raise ValueError("Invalid layer_type")
+        abliteration.project_(attn_out, self._abliteration_r)
 
         mlp_hc = self.mlp_hyper_connection
         hidden_states, block_input, injection = mlp_hc.combine_and_mix(
             hidden_states, attn_out, injection
         )
         mlp_out = self.mlp(block_input)
+        abliteration.project_(mlp_out, self._abliteration_r)
         return hidden_states, mlp_out, injection
 
 
@@ -436,6 +440,7 @@ class Qwen3_8FlashNextModel(nn.Module):
             )
         else:
             self.embed_tokens = PPMissingLayer()
+        abliteration.register(self, config.hidden_size, vllm_config.model_config.dtype)
 
         def get_layer(prefix: str) -> Qwen3_8FlashNextDecoderLayer:
             layer_idx = extract_layer_index(prefix)
@@ -493,7 +498,7 @@ class Qwen3_8FlashNextModel(nn.Module):
             self._mtp_hidden_buffer = None
 
     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
-        return self.embed_tokens(input_ids)
+        return abliteration.project_(self.embed_tokens(input_ids), self._abliteration_r)
 
     def forward(
         self,

@@ -263,6 +263,39 @@ of VRAM on the first request (80 MiB requested, 34 MiB free). hot88 frees about 
 The first 131K request after a start was 4.5–4.7 s slower in both profiles. The headline prompt is built from the
 overlay sources, so it changed with v0.5.0: compare profiles within one day's runs, not with September 29.
 
+## October 2 runtime abliteration
+
+`QWEN38_ABLITERATION` (`models/qwen3_8_flash_next/nvidia/abliteration.py`, user guide in `docs/abliteration.md`)
+reproduces orcarouter/Qwen3.8-Flash-Next-Uncensored on the published checkpoint. That release is the rank-1 edit
+`W' = W − r(rᵀW)` with one direction on all 149 residual writers, so the runtime projects `r` out of those
+writers' outputs instead. This is exact: requantizing edited expert down projections would add a full INT4
+rounding error. Hook points and the reasons behind them:
+
+- Decoder layer: `attn_out` (o_proj/out_proj are the last ops) and `mlp_out` (routed and shared expert outputs
+  are summed with scalar weights; the 64 GB CPU and GPU-share partials too). The MTP head reuses this layer.
+- PLE: right after `value_proj`. The branch then gates (a scalar per stream, linear), applies a grouped RMS norm
+  and the short conv (not linear) and writes `gated + conv(norm(gated))`. Projecting the branch output would not
+  match the weight edit.
+- `embed_input_ids` of the target and of the MTP head. Vision embeddings are merged afterwards and stay unedited,
+  as in the release. Project the lookup rather than patching `embed_tokens` in place: a patched table would also
+  change every module that shares it (a tied `lm_head` when `tie_word_embeddings` is set, which the release leaves
+  unedited).
+- `register()` creates the buffer in the module constructors (under the default device context, so before
+  CUDA-graph capture) and returns None in the CPU-only PLE worker process. `project_()` uses an in-place `addr_`
+  rank-1 update, so an 8K prefill chunk needs no extra full-size buffer; the prefill profile peaks at 24.0 GiB.
+- `scripts/validate_repo.py` rejects `.safetensors` files in the repo, so the direction ships as JSON
+  (`configs/abliteration/orcarouter.json`), and `.dockerignore` is an allow-list that needs the directory.
+
+The extraction (`scripts/extract_refusal_direction.py`, 83 MB of range reads from the gated release) found an
+untouched control tensor byte-identical to ours. Each edit is rank-1 (σ2/σ1 < 0.01), the four tensors give the
+same direction (|cos| ≥ 0.99999), and re-applying the edit reproduces the release's BF16 tensors 88–93% bit-exact,
+the rest one ulp apart. Results (`benchmarks/2026-10-02/`, v0.5.0 image plus this overlay):
+- agent 128K profile: 7 of 8 mild borderline requests refused with the switch off, 0 of 8 with it on;
+- prefill and verify-step cost unchanged (2,909 vs 2,914 tok/s at 131K, 24.1–27.0 ms in both);
+- 64 GB profile with the switch on: 0 of 8 refused, speed within 3% of its published runs.
+
+Keep test prompts mild (`benchmarks/2026-10-02/` lists them) and do not publish replies.
+
 ## Published runtime images
 
 From v0.3.0 on, `.github/workflows/publish-image.yml` builds `docker/Dockerfile`

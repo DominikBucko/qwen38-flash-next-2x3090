@@ -40,6 +40,20 @@ vLLM runtimes; pick the row for your hardware:
 | **2× RTX 3090 24 GB + 64 GB RAM** | **[qwen38-flash-next-2x3090, 64 GB profile](https://github.com/DominikBucko/qwen38-flash-next-2x3090#new-64-gb-ram-profile)** | **3,401–3,413 tok/s** | **84–89 tok/s** | 135,168 |
 | 2× RTX 3090 24 GB + 128 GB RAM | [qwen38-flash-next-2x3090](https://github.com/DominikBucko/qwen38-flash-next-2x3090#run-it) | up to 4,191 tok/s | up to 111.5 tok/s | up to 262,144 |
 
+## New: opt-in uncensored mode
+
+The two-GPU runtime can serve these weights **with their refusals removed**: add `QWEN38_ABLITERATION=orcarouter`
+to `.env`. It applies the edit of
+[orcarouter/Qwen3.8-Flash-Next-Uncensored](https://huggingface.co/orcarouter/Qwen3.8-Flash-Next-Uncensored)
+at runtime: one refusal direction is projected out of every residual-stream write. The weights on this page stay
+unchanged and nothing new is downloaded. On two RTX 3090s with the agent 128K profile, the model refused 7 of 8
+mild borderline requests with the switch off and 0 of 8 with it on. Smoke tests passed and speed was unchanged
+(131K prefill 2,909 vs 2,914 tok/s).
+
+**This removes the model's safety refusals**: put your own safeguards in front of it before serving anyone else.
+It needs an image built from the GitHub repository's main branch until the next release image. See
+[how it works, how it was verified and its limits](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/docs/abliteration.md).
+
 ## New: two RTX 3090s with 64 GB of RAM
 
 The [64 GB profile](https://github.com/DominikBucko/qwen38-flash-next-2x3090/blob/main/configs/2x3090-64gb.env)

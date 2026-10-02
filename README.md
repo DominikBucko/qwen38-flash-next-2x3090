@@ -5,6 +5,10 @@
 <p align="center">One request: 131,072 input tokens, then 2,048 output tokens, best of 2. Prefill with the new <a href="configs/agent-128k-prefill.env">prefill profile</a> (31.3 s to first token), decode with the <a href="configs/agent-128k.env">agent 128K profile</a>. The <a href="configs/fast-256k.env">fast 256K profile</a> reads a full 260,096-token window in 90.8 s (2,865 input tok/s).</p>
 <p align="center"><a href="https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE"><strong>Download the checkpoint</strong></a></p>
 
+> **New: uncensored mode.** `QWEN38_ABLITERATION=orcarouter` removes the model's refusals at runtime: the
+> behaviour of OrcaRouter's uncensored release, with no new weights and no speed cost.
+> [How it works](#new-opt-in-uncensored-mode).
+>
 > **Only 64 GB of RAM?** The new [64 GB profile](#new-64-gb-ram-profile) runs the same two cards with half the
 > memory: **3,410 tok/s prefill and 84 tok/s decode** on a 131,072-token prompt.
 >
@@ -19,6 +23,32 @@ the GPUs, and uses a small MTP3 drafter to recover decode speed.
 The [checkpoint](https://huggingface.co/albucino/Qwen3.8-Flash-Next-W4A16-FP8PLE) combines Intel's AutoRound W4A16 target with FP8 PLE/ngram
 tensors, to fit into 128GB memory. The serving code is a pinned vLLM build plus the
 patches in this repo.
+
+## New: opt-in uncensored mode
+
+`QWEN38_ABLITERATION=orcarouter` gives the served model the behaviour of
+[orcarouter/Qwen3.8-Flash-Next-Uncensored](https://huggingface.co/orcarouter/Qwen3.8-Flash-Next-Uncensored)
+without new weights. That release removes one refusal direction `r` from every matrix that writes to the residual
+stream: `W' = W − r(rᵀW)`. The runtime applies the same projection to the outputs of those matrices instead,
+which for one direction is the same edit, so the published INT4 experts and every other weight stay as they are.
+
+| Same image and afternoon | Off | On |
+|---|---:|---:|
+| Mild borderline requests refused (fake review, lock picking, insult, …), agent 128K profile | 7 of 8 | 0 of 8 |
+| Neutral controls and smoke tests (math, tool call, code) | pass | pass |
+| 131K prefill, agent 128K profile | 2,909 tok/s | 2,914 tok/s |
+| Decode cost per verify step, agent 128K profile | 24.1–27.0 ms | 24.1–27.0 ms |
+
+The 64 GB profile behaves the same (0 of 8 refused, speed within 3% of its published runs). **This removes the
+model's safety refusals**: it follows requests the original model declines. Use it for research, red-teaming or
+your own use, and put your own safeguards in front of it before serving anyone else. It works with every profile
+and needs an image built from this tree (`make build-image`) until the next release image. Add to `.env`:
+
+```bash
+QWEN38_ABLITERATION=orcarouter
+```
+
+How the direction was recovered and verified, and the limits: [docs/abliteration.md](docs/abliteration.md).
 
 ## New: prefill profile
 
@@ -290,6 +320,9 @@ and 3,000 input tok/s on a 131,072-token prompt ([results](benchmarks/2026-09-29
 [`configs/agent-128k-prefill.env`](configs/agent-128k-prefill.env) trades some of that decode for up to 4,191
 input tok/s ([results](benchmarks/2026-09-30/README.md#prefill-profile-for-128-gb-machines)).
 
+For the uncensored mode, add `QWEN38_ABLITERATION=orcarouter` to `.env` with any profile. It removes the model's
+safety refusals; see [docs/abliteration.md](docs/abliteration.md).
+
 Image inputs are optional. See the [vision profile and request example](docs/vision.md).
 
 The default now caches 84 experts per layer to leave more room for prefill.
@@ -333,6 +366,7 @@ upload commands.
 
 The small JSON summaries are public:
 
+- [October 2 runtime abliteration results](benchmarks/2026-10-02/summary.json)
 - [September 30 prefill and 64 GB profile results](benchmarks/2026-09-30/summary.json)
 - [September 29 agent 128K profile results](benchmarks/2026-09-29/summary.json)
 - [September 28 state-block fix A/B and validation](benchmarks/2026-09-28/summary.json)

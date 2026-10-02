@@ -17,6 +17,7 @@ ENV QWEN38_CPU_EXPERTS_BUILD=/opt/qwen38/cpu_experts
 RUN MAX_JOBS=2 python3 -c 'from vllm.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.cpu_experts import build_extension; build_extension(verbose=True)'
 
 COPY configs/2x3090-128gb.env /opt/qwen38/configs/2x3090-128gb.env
+COPY configs/abliteration /opt/qwen38/abliteration
 COPY configs/static_hot_cache_rankings.json /workspace/static_hot_cache_rankings.json
 COPY scripts/serve-container.sh /usr/local/bin/qwen38-serve
 COPY scripts/check_custom_all_reduce.py /opt/qwen38/scripts/check_custom_all_reduce.py
