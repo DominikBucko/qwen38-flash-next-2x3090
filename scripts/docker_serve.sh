@@ -74,16 +74,22 @@ if [[ -n "${MEMORY_LIMIT:-}" ]]; then
 fi
 [[ -n "${CPUSET:-}" ]] && limit_args+=(--cpuset-cpus "$CPUSET")
 
-# Optional persistent Humming/Triton JIT caches: avoids recompiling kernels on
-# every start and inside the first long request.
+# Optional persistent JIT caches (Humming, Triton, TorchInductor): avoids
+# recompiling kernels on every start and inside the first long request.
 cache_mounts=()
 if [[ -n "${JIT_CACHE_DIR:-}" ]]; then
-  mkdir -p "$JIT_CACHE_DIR/humming" "$JIT_CACHE_DIR/triton"
+  mkdir -p "$JIT_CACHE_DIR/humming" "$JIT_CACHE_DIR/triton" "$JIT_CACHE_DIR/inductor"
   jit_cache_dir=$(cd -- "$JIT_CACHE_DIR" && pwd -P)
   cache_mounts=(
     -v "$jit_cache_dir/humming:/root/.humming"
     -v "$jit_cache_dir/triton:/root/.triton"
+    # TorchInductor-managed kernels (most of the torch.compile'd graph) cache
+    # their Triton artifacts under $TORCHINDUCTOR_CACHE_DIR; without this they
+    # recompile on every container restart.
+    -v "$jit_cache_dir/inductor:/root/.torchinductor"
+    -v "$jit_cache_dir/inductor:/tmp/torchinductor_root"
   )
+  docker_env+=(-e "TORCHINDUCTOR_CACHE_DIR=/root/.torchinductor")
 fi
 
 model_dir=$(cd -- "$model_dir" && pwd -P)
