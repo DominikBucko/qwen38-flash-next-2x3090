@@ -47,6 +47,7 @@ for name in \
   QWEN38_PLE_PREFAULT_RESERVE_GIB \
   VLLM_MTP_DRAFT_VOCAB_RANGES \
   KV_CACHE_DTYPE \
+  EXTRA_VLLM_ARGS \
   VLLM_API_KEY
 do
   if declare -p "$name" &>/dev/null; then

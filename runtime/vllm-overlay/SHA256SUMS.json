@@ -36,7 +36,7 @@
   "models/qwen3_8_flash_next/nvidia/draft_vocab.py": "289570d60f20cc069c486d64de4d59d4f1c2cfff115f2f2c7cca8a04a63619b5",
   "models/qwen3_8_flash_next/nvidia/hyperconnection.py": "7a0f1973ca35019a43290822395f701386d2cea99a1c596cccf318a1d88ee703",
   "models/qwen3_8_flash_next/nvidia/indexer_qsa.py": "a04c28f1ffd5a677d30d2ed09ab5f3edcb96922e127e054bc280a8cd03e5279a",
-  "models/qwen3_8_flash_next/nvidia/low_latency_gemm.py": "1dbfae0180902c422f58ccf968fddd83295996aa3f128ce9befe7b6cbce9cd49",
+  "models/qwen3_8_flash_next/nvidia/low_latency_gemm.py": "f1af25b3e6d978b117f3f517f34dbe05ba5436b99d8eebaf41c46339f66160ca",
   "models/qwen3_8_flash_next/nvidia/model.py": "52c5cb569b27b2138d3f4371d269b2662394a3fa2bd53dd92467761377ce632d",
   "models/qwen3_8_flash_next/nvidia/model_state.py": "9ffe2a025a3661f60b9698bead0b6668ef4b92443fd92bd5ed7d462dfa72048f",
   "models/qwen3_8_flash_next/nvidia/mtp.py": "5fb4e2f9b3546fdd1f8a121600dd4a83214805be7b3e0f01efe32f4d2b6045e3",

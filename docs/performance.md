@@ -15,7 +15,7 @@ the default hot84, BF16 KV, 262,144-token single-request shape and adds:
 | `QWEN38_STREAM_STAGE=1`, `QWEN38_STREAM_STAGE_MIN_TOKENS=1536` | Large prefill chunks copy each layer's cold experts to the GPU by DMA one or two layers ahead, then run the unchanged expert GEMM from VRAM. Copy buffers reuse hot-cache pages. |
 | `QWEN38_ASYNC_SCHEDULING=1` | Overlaps host input preparation with GPU work. |
 | `DISABLE_CUSTOM_ALL_REDUCE=0`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False` | P2P all-reduce for decode collectives. Needs working bidirectional CUDA P2P (see below). |
-| `QWEN38_TRITON_SKINNY=1` | Tensor-core kernel for decode-sized dense projections and the LM head. |
+| `QWEN38_TRITON_SKINNY=1` | Tensor-core kernel for decode-sized dense projections and the LM head. SM 8.6 and 8.9 only; elsewhere it logs a warning and stays off. |
 | `VLLM_MTP_DRAFT_VOCAB_RANGES=[[0,65536],[248044,248320]]` | Smaller vocabulary for MTP proposals only; the target verifies every token. |
 | `QWEN38_STAGE_OVERLAP=1` | Overlaps decode down-projection expert copies with the gate/up GEMM. |
 | `QWEN38_PLE_PREFAULT=1` | Reads the 51.2 GB PLE table back into RAM after loading. It finishes a few minutes after the server is ready. |
@@ -342,6 +342,17 @@ weights, with instructions for correcting it.
 Do not infer a custom-all-reduce speedup from the separate 78.8238 tok/s raw
 `repo-code` diagnostic: it used a different prompt recipe, hot-cache size, and
 allocator profile. A speed claim needs a same-prompt, same-profile matched run.
+
+## Extra vLLM arguments
+
+`EXTRA_VLLM_ARGS` in `.env` appends arguments to `vllm serve`, after the launcher's own flags, so they override
+them. The value is split on whitespace, so one argument cannot contain spaces (write JSON values without them):
+
+```bash
+EXTRA_VLLM_ARGS=--max-logprobs 5 --enable-log-requests
+```
+
+This is for experiments. A flag that changes memory, scheduling or the KV cache invalidates the published numbers.
 
 ## Related documentation
 

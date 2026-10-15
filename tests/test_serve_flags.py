@@ -194,6 +194,24 @@ class ServeFlagsTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertFalse(self.capture.exists())
 
+    def test_extra_vllm_args_are_appended_last(self) -> None:
+        extra = "--kv-offloading-size 32 --kv-offloading-backend native"
+        result = self.run_launcher(settings={"EXTRA_VLLM_ARGS": extra})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertEqual(argv[-4:], extra.split())
+
+    def test_no_extra_vllm_args_by_default(self) -> None:
+        result = self.run_launcher()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        argv = self.captured()["argv"]
+        self.assertEqual(argv[argv.index("--speculative-config") + 2:], [])
+
+    def test_docker_launcher_forwards_extra_vllm_args(self) -> None:
+        result = self.run_docker_launcher({"EXTRA_VLLM_ARGS": "--max-logprobs 5"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("EXTRA_VLLM_ARGS=--max-logprobs 5", self.captured()["argv"])
+
     def test_docker_launcher_forwards_vision_settings(self) -> None:
         settings = {"ENABLE_VISION": "1", "VISION_MAX_IMAGES": "1",
                     "VISION_MAX_PIXELS": "1048576"}

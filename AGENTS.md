@@ -156,7 +156,8 @@ Opt-in through `configs/fast-256k.env` (copy into `.env`):
 - `QWEN38_TRITON_SKINNY=1`: all 533 unquantized linears, the LM head and the HC
   up projection use a Triton tensor-core kernel for M<=8 (M padded to 16, FP32
   accumulation, deterministic split-K). Error versus an FP32 reference matched
-  cuBLAS on 78/78 shapes; isolated verify-step cost 7.9 -> 6.2 ms.
+  cuBLAS on 78/78 shapes; isolated verify-step cost 7.9 -> 6.2 ms. Gated to SM 8.6 and 8.9: a 4090 report
+  (issue #40) measured decode 79 -> 86 tok/s with identical output; other GPUs log a warning and keep cuBLAS.
 - `VLLM_MTP_DRAFT_VOCAB_RANGES=[[0,65536],[248044,248320]]`: draft-only
   restriction. Target verification is unchanged, so greedy output is unchanged.
   About 1 ms per cycle at 260K; acceptance moved within noise.
