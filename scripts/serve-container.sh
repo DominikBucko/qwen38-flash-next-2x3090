@@ -105,6 +105,10 @@ else
   offload_args=(--offload-backend uva --cpu-offload-gb "$CPU_OFFLOAD_GB" --cpu-offload-params experts)
 fi
 
+# Extra `vllm serve` arguments, appended last so they override the flags above. Split on whitespace:
+# a single argument cannot contain spaces (write JSON values without them).
+read -r -a extra_vllm_args <<< "${EXTRA_VLLM_ARGS:-}"
+
 exec vllm serve "$model" \
   --served-model-name "$SERVED_MODEL_NAME" \
   --host 0.0.0.0 --port "$PORT" \
@@ -134,4 +138,5 @@ exec vllm serve "$model" \
   --tool-call-parser qwen3_coder \
   --reasoning-parser qwen3 \
   --speculative-config \
-  "{\"method\":\"mtp\",\"num_speculative_tokens\":$MTP_DEPTH,\"use_local_argmax_reduction\":true,\"model\":\"$mtp_model\"}"
+  "{\"method\":\"mtp\",\"num_speculative_tokens\":$MTP_DEPTH,\"use_local_argmax_reduction\":true,\"model\":\"$mtp_model\"}" \
+  ${extra_vllm_args[@]+"${extra_vllm_args[@]}"}

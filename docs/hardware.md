@@ -137,10 +137,16 @@ published measurements.
 
 ## Can I run Qwen3.8 Flash Next on dual RTX 4090?
 
-Two RTX 4090 cards have not been validated by this project. Their 24 GB per-card
-capacity does not by itself prove compatibility with the pinned kernels,
-container, collectives, topology, or full-context memory budget. No 4090
-throughput number or support promise should be inferred from the 3090 results.
+This project has not validated two RTX 4090s itself, but a community report
+([#40](https://github.com/DominikBucko/qwen38-flash-next-2x3090/issues/40)) completed a full 262,144-token
+sequence on two 4090s (PCIe 4.0 ×8/×8, 128 GB DDR5) with the v0.5.0 image, the default hot84 profile and the fast
+256K switches. Reported: about 2,150 input tok/s at the full-context boundary, 80–90 tok/s decode, no OOM or
+preemption.
+
+- CUDA P2P is unavailable on GeForce 4090s with the stock driver, so leave `DISABLE_CUSTOM_ALL_REDUCE=1` and
+  `expandable_segments:True` (the defaults) instead of the fast profile's custom all-reduce pair.
+- `QWEN38_TRITON_SKINNY=1` now also runs on SM 8.9. The report measured decode 79 → 86 tok/s with identical
+  output; before this change the switch did nothing on a 4090.
 
 If testing 4090s, start with the unchanged released profile, retain the pinned
 checkpoint and image, run the full preflight, and treat the result as new
