@@ -8,6 +8,7 @@ import warnings
 import math
 from collections.abc import Iterable, Sequence
 
+import os
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -206,6 +207,10 @@ def _get_ple_embedding_quant_method(
     # the MoE weights and serialized FP8 for PLE).  In that case the global
     # quant_config is not Fp8Config, so use the explicit checkpoint metadata
     # carried by Qwen3.8-Flash-Next's text config.
+    if os.environ.get("PLE_BF16_TABLE") == "1":
+        # exp: bf16 PLE table — build the unquantized (params_dtype) path and
+        # let the disk tier serve rows verbatim; no fp8 method, no global scale.
+        return None
     if checkpoint_dtype == "float8_e4m3fn":
         return Qwen3_8FlashNextPLEFp8EmbeddingMethod()
 
@@ -571,7 +576,11 @@ class Qwen3_8FlashNextNGramEmbedding(PleOffloadLayer):
         if weight is not None:
             return weight.dtype
         if hasattr(self, "_offload_weight_scale"):
-            return torch.float8_e4m3fn
+            return (
+                default_dtype
+                if os.environ.get("PLE_BF16_TABLE") == "1"
+                else torch.float8_e4m3fn
+            )
         return default_dtype
 
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:

@@ -20,6 +20,9 @@ Class structure mirrors the GPU worker pattern in multiproc_executor.py:
 """
 
 import contextlib
+import os
+import json
+import mmap as _mmap
 import multiprocessing.process
 import os
 import pickle
@@ -341,6 +344,290 @@ class PleOffloadWorker:
             death_pipe.close()
 
 
+def _ple_disk_shard_of(mapped_name: str) -> str | None:
+    """"<layer>.a.b.shard_3.weight" -> "<layer>.a.b" (the parameter the shard fills)."""
+    import re
+
+    m = re.match(r"^(.*)\.shard_\d+\.weight$", mapped_name)
+    return m.group(1) if m else None
+
+
+class _PleQuantTable:
+    """Shard-mmapped quantized n-gram table; gathers dequantize to BF16."""
+
+    ROWS_PER_SHARD = 2_500_012
+
+    def __init__(self, quant_dir: str, total_rows: int, width: int) -> None:
+        import json
+        import os
+
+        from safetensors import safe_open
+
+        meta = json.load(open(os.path.join(quant_dir, "META.json")))
+        self.layout = meta["layout"]
+        assert meta["rows"] == total_rows and meta["width"] == width, (
+            f"sidecar built for {meta['rows']}x{meta['width']}, "
+            f"table is {total_rows}x{width}"
+        )
+        n_shards = meta["shards"]
+        assert n_shards * self.ROWS_PER_SHARD == total_rows, "non-uniform shards"
+        # Order matters: the e2m1 layout string contains "e4m3" (its scale dtype).
+        if "e2m1" in self.layout:
+            key = "weight_e2m1"
+        elif "e4m3" in self.layout:
+            key = "weight_fp8"
+        else:
+            key = "weight_i4"
+        self._q, self._s, self._s2 = [], [], []
+        for n in range(n_shards):
+            f = safe_open(os.path.join(quant_dir, f"shard_{n}.safetensors"),
+                          framework="pt")
+            self._q.append(f.get_tensor(key))
+            self._s.append(f.get_tensor("weight_scale"))
+            self._s2.append(
+                f.get_tensor("weight_scale_2").item()
+                if "weight_scale_2" in f.keys() else 1.0
+            )
+        self.width = width
+        self._lut = None
+        # nvfp4: e4m3 scales are 1 byte, and a packed nvfp4 table may carry a
+        # PER-SHARD weight_scale_2 (vLLM PR #56273 assumes one global), so the
+        # scalar rides the wire as 4 raw fp32 bytes per row. int4 layout
+        # unchanged.
+        _PACKED_NVFP4 = "group16_e2m1_e4m3scale_lownibblefirst"
+        _PACKED_INT4 = "group16_int4_fp16scale_lownibblefirst"
+        self._nvfp4 = self.layout == _PACKED_NVFP4
+        self.packed = (
+            os.environ.get("VLLM_PLE_PACKED", "0") == "1"
+            and self.layout in (_PACKED_INT4, _PACKED_NVFP4)
+        )
+        if self.packed:
+            logger.info("PLE quant table: PACKED transport active (raw nibble+%s "
+                        "rows; GPU-side dequant%s).",
+                        "e4m3-scale+fp32-global" if self._nvfp4 else "fp16-scale",
+                        ", nvfp4 e2m1" if self._nvfp4 else "")
+        elif os.environ.get("VLLM_PLE_PACKED", "0") == "1":
+            raise RuntimeError(f"VLLM_PLE_PACKED=1 but layout {self.layout!r}"
+                               " is not a packed-capable int4/nvfp4 layout")
+        logger.info("PLE quant table: %s, %d shards mmapped from %s",
+                    self.layout, n_shards, quant_dir)
+
+    def gather_into(self, ids: torch.Tensor, out: torch.Tensor) -> None:
+        ids = ids.long()
+        shard = ids // self.ROWS_PER_SHARD
+        local = ids - shard * self.ROWS_PER_SHARD
+        order = torch.argsort(shard)
+        s_sorted, l_sorted = shard[order], local[order]
+        uniq, counts = torch.unique_consecutive(s_sorted, return_counts=True)
+        pos = 0
+        if self.packed:
+            pb = self.width // 2                      # packed nibble bytes
+            nsc = self._s[0].shape[1]                 # groups = width // 16
+            # int4: 16-bit scales, no per-row global (folded into scale).
+            # nvfp4: 8-bit e4m3 scales + a per-row 32-bit fp32 global.
+            sc_b, gl_b = (1, 4) if self._nvfp4 else (2, 0)
+            need = pb + sc_b * nsc + gl_b
+            assert out.dtype == torch.uint8 and out.shape[1] >= need, (
+                f"packed PLE transport expects uint8 rows >= {need}B, "
+                f"got {out.dtype} x {out.shape[1]}")
+            for s, c in zip(uniq.tolist(), counts.tolist()):
+                sel = l_sorted[pos:pos + c]
+                tmp = torch.empty(c, out.shape[1], dtype=torch.uint8)
+                tmp[:, :pb] = self._q[s].index_select(0, sel)
+                tmp[:, pb:pb + sc_b * nsc] = (
+                    self._s[s].index_select(0, sel).view(torch.uint8)
+                    .reshape(c, sc_b * nsc))
+                if gl_b:
+                    # weight_scale_2 is per-shard; broadcast to each row.
+                    # NB: 1-D tensor — a 0-dim tensor cannot .view() dtype.
+                    gb = torch.tensor(
+                        [float(self._s2[s])], dtype=torch.float32
+                    ).view(torch.uint8)
+                    tmp[:, pb + sc_b * nsc:pb + sc_b * nsc + gl_b] = gb
+                out[order[pos:pos + c]] = tmp
+                pos += c
+            return
+        for s, c in zip(uniq.tolist(), counts.tolist()):
+            sel = l_sorted[pos:pos + c]
+            rows = self._dequant(s, sel)
+            out[order[pos:pos + c]] = rows.to(out.dtype)
+            pos += c
+
+    def _dequant(self, s: int, sel: torch.Tensor) -> torch.Tensor:
+        if "e2m1" in self.layout:
+            if self._lut is None:
+                mags = [0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0]
+                self._lut = torch.tensor(mags + [-m for m in mags],
+                                         dtype=torch.float32)
+            packed = self._q[s].index_select(0, sel)
+            lo = (packed & 0xF).long()
+            hi = (packed >> 4).long()
+            nib = torch.stack((lo, hi), dim=-1).view(packed.shape[0], self.width)
+            scale = self._s[s].index_select(0, sel).to(torch.float32)
+            g = self.width // scale.shape[1]
+            return (self._lut[nib]
+                    * scale.repeat_interleave(g, dim=1)
+                    * self._s2[s])
+        if "e4m3" in self.layout:
+            q = self._q[s].index_select(0, sel).to(torch.float32)
+            return q * self._s[s].index_select(0, sel)[:, None]
+        packed = self._q[s].index_select(0, sel)
+        lo = (packed & 0xF).to(torch.int16)
+        hi = (packed >> 4).to(torch.int16)
+        nib = torch.stack((lo, hi), dim=-1).view(packed.shape[0], self.width)
+        scale = self._s[s].index_select(0, sel).to(torch.float32)
+        g = self.width // scale.shape[1]
+        return (nib.to(torch.float32) - 8) * scale.repeat_interleave(g, dim=1)
+
+
+def _ple_quant_dir() -> str | None:
+    import os
+
+    return os.environ.get("VLLM_PLE_QUANT_DIR") or None
+
+
+def _ple_quant_attach(layer_name: str, layer: torch.nn.Module,
+                      quant_dir: str) -> str | None:
+    """Swap the layer's table for a sidecar-backed quant store.
+
+    Returns the stubbed parameter's name, or None when the layer has no
+    parameter large enough to be a table (>= 1 GiB).
+    """
+    named = sorted(layer.named_parameters(), key=lambda kv: kv[1].numel(), reverse=True)
+    if not named or named[0][1].numel() * named[0][1].element_size() < (1 << 30):
+        return None
+    pname, param = named[0]
+    rows, width = param.shape
+    owner = layer
+    parts = pname.split(".")
+    for p in parts[:-1]:
+        owner = getattr(owner, p)
+    owner._ple_quant = _PleQuantTable(quant_dir, rows, width)
+    # Stub before anything writes the parameter. Replace the Parameter object rather
+    # than assigning .data: with a quantized sidecar the table is built on the meta
+    # device (no 95 GB virtual reservation for the kernel's overcommit heuristic to
+    # refuse), and set_data() rejects a meta -> cpu swap. vLLM's weight attributes
+    # (weight_loader, output_dim, ...) are carried over to the stub.
+    old = getattr(owner, parts[-1])
+    stub = torch.nn.Parameter(torch.empty(0, width, dtype=param.dtype), requires_grad=False)
+    for k, v in vars(old).items():
+        setattr(stub, k, v)
+    setattr(owner, parts[-1], stub)
+    logger.info("PLE quant: %s.%s stubbed, gathers served from sidecar.",
+                layer_name, pname)
+    return pname
+
+
+def _ple_disk_dir() -> str | None:
+    import os
+
+    return os.environ.get("VLLM_PLE_DISK_OFFLOAD_DIR") or None
+
+
+_PLE_DISK_MAPS: dict[str, object] = {}
+
+
+def _disk_backed_tensor(path: str, shape: tuple[int, ...], dtype: torch.dtype,
+                        writable: bool) -> torch.Tensor:
+    """Map ``path`` as a tensor of ``shape``/``dtype``.
+
+    numpy has no bfloat16, so the file is mapped with a same-width integer dtype
+    and reinterpreted. ``writable`` selects a shared read-write mapping (first
+    boot, shard writes must reach the file) versus copy-on-write (steady state).
+    MADV_RANDOM is applied either way: gathers are random-access and readahead
+    only evicts useful pages.
+    """
+    import numpy as np
+
+    _NP = {torch.bfloat16: (np.uint16, torch.uint16), torch.float16: (np.uint16, torch.uint16),
+           torch.float32: (np.uint32, torch.uint32), torch.float8_e4m3fn: (np.uint8, torch.uint8)}
+    np_dtype, torch_int = _NP[dtype]
+    arr = np.memmap(path, dtype=np_dtype, mode="r+" if writable else "c", shape=shape)
+    with contextlib.suppress(Exception):
+        arr._mmap.madvise(_mmap.MADV_RANDOM)  # noqa: SLF001 - numpy has no public madvise
+    _PLE_DISK_MAPS[path] = arr
+    return torch.from_numpy(arr).view(dtype)
+
+
+def _ple_disk_attach(layer_name: str, layer: torch.nn.Module,
+                     disk_dir: str) -> tuple[str, bool] | None:
+    """Swap the layer's largest parameter (the n-gram table) for a disk-backed map.
+
+    Returns ``(param_name, file_complete)`` or ``None`` when the layer has no
+    parameter large enough to be worth spilling (>= 1 GiB).
+    """
+    import os
+
+    named = sorted(layer.named_parameters(), key=lambda kv: kv[1].numel(), reverse=True)
+    if not named or named[0][1].numel() * named[0][1].element_size() < (1 << 30):
+        return None
+    pname, param = named[0]
+    shape, dtype = tuple(param.shape), param.dtype
+    nbytes = param.numel() * param.element_size()
+    os.makedirs(disk_dir, exist_ok=True)
+    base = os.path.join(disk_dir, layer_name.replace("/", "_") + "." + pname)
+    bin_path, done_path = base + ".bin", base + ".done.json"
+
+    complete = False
+    if (os.path.exists(done_path) and os.path.exists(bin_path)
+            and os.path.getsize(bin_path) == nbytes):
+        meta = json.load(open(done_path))
+        complete = meta.get("shape") == list(shape) and meta.get("dtype") == str(dtype)
+    if not complete:
+        # SAFETY: never clobber a foreign table file. Truncate-means-write-
+        # through could silently fp8-ify a BF16 table, so an existing
+        # mismatched-size file aborts the boot with the full truth.
+        if os.path.exists(bin_path) and os.path.getsize(bin_path) != nbytes:
+            raise RuntimeError(
+                f"PLE disk: {bin_path} exists at {os.path.getsize(bin_path)} "
+                f"bytes but model expects {nbytes} (param dtype {param.dtype}, "
+                "shape "
+                f"{tuple(param.shape)}). Refusing to overwrite a foreign "
+                "table — align PLE_BF16_TABLE/dtype or remove the file."
+            )
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(done_path)
+        with open(bin_path, "ab") as f:
+            f.truncate(nbytes)
+
+    mapped = _disk_backed_tensor(bin_path, shape, dtype, writable=not complete)
+    # Replace the parameter data in place; module structure and names are unchanged,
+    # so load_weights and the gather path are untouched.
+    owner = layer
+    parts = pname.split(".")
+    for p in parts[:-1]:
+        owner = getattr(owner, p)
+    getattr(owner, parts[-1]).data = mapped
+    logger.info(
+        "PLE disk offload: %s.%s -> %s (%.1f GiB, %s)",
+        layer_name, pname, bin_path, nbytes / (1 << 30),
+        "reusing finished file" if complete else "first boot, writing through",
+    )
+    return pname, complete
+
+
+def _ple_disk_finalize(layer_name: str, layer: torch.nn.Module, pname: str,
+                       disk_dir: str) -> None:
+    """Flush the written mapping, record completion, and remap copy-on-write."""
+    import os
+
+    owner = layer
+    parts = pname.split(".")
+    for p in parts[:-1]:
+        owner = getattr(owner, p)
+    param = getattr(owner, parts[-1])
+    base = os.path.join(disk_dir, layer_name.replace("/", "_") + "." + pname)
+    arr = _PLE_DISK_MAPS.get(base + ".bin")
+    if arr is not None:
+        with contextlib.suppress(Exception):
+            arr.flush()
+    json.dump({"shape": list(param.shape), "dtype": str(param.dtype)},
+              open(base + ".done.json", "w"))
+    param.data = _disk_backed_tensor(base + ".bin", tuple(param.shape), param.dtype,
+                                     writable=False)
+    logger.info("PLE disk offload: %s.%s finalized and remapped copy-on-write.",
+                layer_name, pname)
+
 
 def _mem_available_bytes() -> int:
     with open("/proc/meminfo") as meminfo:
@@ -447,6 +734,39 @@ class PleOffloadRunner:
         )
         offload_prefixes = tuple(f"{name}." for name in offload_layers)
 
+        quant_dir = _ple_quant_dir()
+        disk_dir = _ple_disk_dir() if quant_dir is None else None
+        disk_attached: dict[str, str] = {}
+        disk_complete_params: set[str] = set()
+        disk_complete_tables: tuple[str, ...] = ()
+        if quant_dir is not None:
+            table_prefixes = []
+            for layer_name, layer in offload_layers.items():
+                pname = _ple_quant_attach(layer_name, layer, quant_dir)
+                if pname is None:
+                    continue
+                full = f"{layer_name}.{pname}"
+                disk_complete_params.add(full)
+                table_prefixes.append(full.rsplit(".", 1)[0])
+            disk_complete_tables = tuple(table_prefixes)
+        if disk_dir is not None:
+            table_prefixes = []
+            for layer_name, layer in offload_layers.items():
+                attached = _ple_disk_attach(layer_name, layer, disk_dir)
+                if attached is None:
+                    continue
+                pname, complete = attached
+                disk_attached[layer_name] = pname
+                if complete:
+                    full = f"{layer_name}.{pname}"
+                    disk_complete_params.add(full)
+                    # "...ngram_embedding.weight" -> "...ngram_embedding": the module
+                    # whose shard_N.weight checkpoint tensors fill this table.
+                    table_prefixes.append(full.rsplit(".", 1)[0])
+            # Shard tensors that land inside an already-finished table are not
+            # re-read from the checkpoint: mapping the file replaces them.
+            disk_complete_tables = tuple(table_prefixes)
+
         # Step 3: filter checkpoint tensors before model.load_weights(). The
         # conditional-generation checkpoint uses HF names such as
         # ``model.language_model.*`` while named_modules exposes mapped vLLM
@@ -467,6 +787,31 @@ class PleOffloadRunner:
                     mapped_name = mapped_names[0] if mapped_names else None
                 if mapped_name is not None and mapped_name.startswith(offload_prefixes):
                     matched_checkpoint_tensors += 1
+                    if disk_complete_tables:
+                        table = _ple_disk_shard_of(mapped_name)
+                        if table is None and mapped_name.endswith(
+                            (".weight", ".weight_scale", ".weight_scale_2", ".input_scale")
+                        ):
+                            # Checkpoints that ship the table as one tensor plus a
+                            # global scale (the FP8 revision and the NVFP4 builds
+                            # derived from it) instead of shard_N.weight parts. The
+                            # sidecar owns those rows, so drop them before the loader
+                            # tries to write a 51.2B tensor into the stub.
+                            table = mapped_name.rsplit(".", 1)[0]
+                        if table is not None and table.startswith(disk_complete_tables):
+                            if (
+                                disk_attached
+                                and mapped_name.endswith(".weight_scale")
+                                and os.environ.get("PLE_BF16_TABLE") != "1"
+                            ):
+                                # exp/disk8: a raw disk table (.bin) carries the
+                                # weight rows only; the global weight_scale stays a
+                                # small real parameter that load_weights must fill.
+                                # Quant-sidecar mode (disk_attached empty) keeps
+                                # the original drop-weight-and-scale behavior.
+                                yield weight_name, tensor
+                                continue
+                            continue
                     yield weight_name, tensor
 
         loader = get_model_loader(load_config)
@@ -497,6 +842,7 @@ class PleOffloadRunner:
             loaded_expected_params = expected_offload_params.intersection(loaded_params)
             missing_offload_params = sorted(
                 expected_offload_params.difference(loaded_expected_params)
+                - disk_complete_params
             )
             if missing_offload_params:
                 raise RuntimeError(
@@ -523,6 +869,12 @@ class PleOffloadRunner:
         # the remainder of the model is still on meta and must not be visited.
         for layer in offload_layers.values():
             process_weights_after_loading(layer, model_config, torch.device("cpu"))
+
+        if disk_dir is not None:
+            for layer_name, pname in disk_attached.items():
+                if f"{layer_name}.{pname}" not in disk_complete_params:
+                    _ple_disk_finalize(layer_name, offload_layers[layer_name],
+                                       pname, disk_dir)
 
         self._layers.update(offload_layers)
         del model
