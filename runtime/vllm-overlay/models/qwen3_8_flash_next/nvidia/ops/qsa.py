@@ -6,16 +6,20 @@ from __future__ import annotations
 
 import math
 import os
+from functools import lru_cache
 
 import torch
 
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON, tl, triton
 
-# Bound prefill scratch independently of the context length. A 128 MiB score
-# allocation fails on otherwise valid hot88 placements with ~90 MiB free.
-# Row chunking does not reduce the visible columns or change top-k precision.
-_LOGITS_WORKSPACE_BYTES = 64 * 1024 * 1024
+
+@lru_cache(maxsize=1)
+def _is_sm120() -> bool:
+    """True on sm_120 (RTX PRO 6000 Blackwell): selects the sm_120 tuning table."""
+    return current_platform.get_device_capability() == (12, 0)
+
+_LOGITS_WORKSPACE_BYTES = 128 * 1024 * 1024
 _TOPK_WORKSPACE_BYTES = 1024 * 1024
 _QSA_TOPK_MODE = os.environ.get("VLLM_QSA_EXACT_TOPK", "0").lower()
 if _QSA_TOPK_MODE in ("true", "yes"):
@@ -250,6 +254,8 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
     partial_output_ptr,
     partial_lse_ptr,
     output_ptr,
+    softmax_scale,
+    output_scale,
     k_scale_ptr,
     v_scale_ptr,
     stride_q_row,
@@ -281,6 +287,7 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
     NUM_TILES: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    IS_FP8: tl.constexpr,
 ) -> None:
     row = tl.program_id(0)
     kv_head = tl.program_id(1)
@@ -304,7 +311,10 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
     max_value = tl.full((BLOCK_M,), -1.0e20, dtype=tl.float32)
     normalizer = tl.zeros((BLOCK_M,), dtype=tl.float32)
     accumulator = tl.zeros((BLOCK_M, HEAD_DIM), dtype=tl.float32)
-    softmax_scale_log2: tl.constexpr = (HEAD_DIM**-0.5) * 1.4426950408889634
+    # softmax_scale is the host-side attention scale (1/sqrt(head_dim), with the
+    # fp8 K dequant scale already pre-multiplied in); convert to log2 units once
+    # here for the exp2-based online softmax.
+    score_scale = softmax_scale * 1.4426950408889634
 
     # Dynamic bounds avoid padded main-loop iterations for uneven splits.
     split_tile_start = split_id * NUM_TILES // NUM_SPLITS
@@ -378,17 +388,28 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
                 mask=valid[:, None],
                 other=0.0,
             )
+            if IS_FP8:
+                # e4m3 -> Q dtype is exact; keep the QK dot in Q's dtype (fp8 QK
+                # measured slower here and less accurate).
+                keys = keys.to(query.dtype)
         scores = tl.dot(query, keys)
         if QUANT:
             scores *= key_scale[None, :]
-        # Scaling scores avoids re-quantizing a scaled query to BF16.
-        scores *= softmax_scale_log2
+        # Scaling scores avoids re-quantizing a scaled query to BF16; for the
+        # per-tensor fp8 cache the K dequant scale is folded into softmax_scale
+        # by the wrapper on the host.
+        scores *= score_scale
         scores = tl.where(valid[None, :], scores, -1.0e20)
         next_max = tl.maximum(max_value, tl.max(scores, axis=1))
         alpha = tl.math.exp2(max_value - next_max)
         probabilities = tl.where(
             valid[None, :], tl.math.exp2(scores - next_max[:, None]), 0.0
         )
+        if IS_FP8:
+            # Dequant V to fp16 (not bf16) for the PV dot: P <= 1 (online
+            # softmax) so fp16 has the range, its wider mantissa is more
+            # accurate, and the fp8->fp16 upcast with an fp16 PV dot is faster.
+            values = values.to(tl.float16)
         if QUANT:
             weighted = (probabilities * value_scale[None, :]).to(values.dtype)
         else:
@@ -402,9 +423,14 @@ def _qsa_sparse_paged_gqa_splitk_kernel(
         max_value = next_max
 
     has_values = normalizer > 0
+    # Fold the fp8 V dequant scale (output_scale, 1.0 for bf16) into a per-row
+    # reciprocal normalizer, so the output is a per-row multiply rather than a
+    # HEAD_DIM-wide scale. The split-K LSE below keeps the unscaled normalizer,
+    # so the merge stays correct.
+    inv_normalizer = output_scale / tl.maximum(normalizer, 1.0e-20)
     normalized_output = tl.where(
         has_values[:, None],
-        accumulator / tl.maximum(normalizer[:, None], 1.0e-20),
+        accumulator * inv_normalizer[:, None],
         0.0,
     )
     output_mask = head_offsets[:, None] < GROUP_SIZE
@@ -913,9 +939,6 @@ def qsa_select_paged_tokens(
             token_topk,
             out[row_slice],
         )
-        # Drop the previous chunk before qsa_mqa_paged allocates the next one.
-        # Assignment alone keeps both score tensors live during that call.
-        del logits, visible_blocks
     return out
 
 
@@ -927,11 +950,18 @@ def qsa_sparse_paged_attention(
     block_table: torch.Tensor,
     token_to_req: torch.Tensor,
     out: torch.Tensor | None = None,
-    k_scale: torch.Tensor | None = None,
-    v_scale: torch.Tensor | None = None,
+    k_scale: float | torch.Tensor | None = None,
+    v_scale: float | torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Run sparse GQA directly over paged BF16 K/V caches, or int8/fp8 caches with per-(token, head)
-    float32 scales k_scale/v_scale shaped [num_blocks, block_size, num_kv_heads]."""
+    """Run sparse GQA directly over paged BF16 or quantized K/V caches.
+
+    Two quantization schemes share this kernel. Per-(token, head): int8/fp8
+    caches with float32 scale tensors k_scale/v_scale shaped
+    [num_blocks, block_size, num_kv_heads]. Per-tensor: fp8_e4m3 caches with
+    the layer's dequant scales as host floats — k_scale is pre-multiplied into
+    the softmax scale and v_scale becomes the kernel's output scale, so that
+    path needs no device scale buffers and the hot loop no extra loads.
+    """
 
     if not q.is_cuda or not HAS_TRITON:
         raise RuntimeError("paged QSA sparse attention requires CUDA and Triton")
@@ -949,14 +979,25 @@ def qsa_sparse_paged_attention(
         raise ValueError("QSA sparse attention requires valid grouped-query heads")
     head_dim = q.shape[2]
     assert head_dim >= 16 and (head_dim & (head_dim - 1)) == 0
-    quant = k_scale is not None
+    assert q.dtype == torch.bfloat16
+    assert k_cache.dtype == v_cache.dtype
+    quant = isinstance(k_scale, torch.Tensor)
+    is_fp8 = (not quant) and k_cache.dtype == torch.float8_e4m3fn
     if quant:
-        assert q.dtype == torch.bfloat16 and k_cache.dtype == v_cache.dtype
         assert k_cache.dtype in (torch.int8, torch.float8_e4m3fn)
         assert v_scale is not None and k_scale.shape == v_scale.shape == k_cache.shape[:3]
         assert k_scale.dtype == v_scale.dtype == torch.float32 and k_scale.stride() == v_scale.stride()
+    if is_fp8:
+        assert k_scale is not None and v_scale is not None
+        # Host pre-multiply: fold the K dequant scale into the attention scale
+        # and pass V's dequant scale as the kernel's output scale.
+        softmax_scale = (head_dim**-0.5) * float(k_scale)
+        output_scale = float(v_scale)
     else:
-        assert q.dtype == k_cache.dtype == v_cache.dtype == torch.bfloat16
+        if not quant:
+            assert q.dtype == k_cache.dtype == v_cache.dtype == torch.bfloat16
+        softmax_scale = head_dim**-0.5
+        output_scale = 1.0
     assert logical_indices.dtype == block_table.dtype == torch.int32
     assert token_to_req.dtype == torch.int32
     assert q.device == k_cache.device == v_cache.device
@@ -1024,6 +1065,8 @@ def qsa_sparse_paged_attention(
         partial_output,
         partial_lse,
         out,
+        softmax_scale,
+        output_scale,
         k_scale if quant else out,
         v_scale if quant else out,
         q.stride(0),
@@ -1055,6 +1098,7 @@ def qsa_sparse_paged_attention(
         NUM_TILES=num_tiles,
         BLOCK_M=block_m,
         BLOCK_N=block_n,
+        IS_FP8=is_fp8,
         num_warps=partial_warps,
         num_stages=2,
     )

@@ -23,6 +23,7 @@ from vllm.model_executor.layers.quantization import QuantizationConfig
 from vllm.model_executor.layers.rotary_embedding import MRotaryEmbedding, get_rope
 from vllm.model_executor.models.qwen3_next import Qwen3NextAttention
 from vllm.platforms import current_platform
+from vllm.platforms.interface import DeviceCapability
 from vllm.transformers_utils.configs.qwen3_8_flash_next import (
     Qwen3_8FlashNextTextConfig,
 )
@@ -67,9 +68,53 @@ class Qwen3_8FlashNextQSAFlashAttentionBackend(FlashAttentionBackend):
     """FullAttentionSpec backend used by the merged QSA owner."""
 
     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.bfloat16]
-    # Per-(token, head) int8/fp8 main K/V with separate float32 scale caches (qsa.py _pth_caches).
+    # Per-(token, head) int8/fp8 main K/V with separate float32 scale caches (qsa.py _pth_caches);
+    # per-tensor fp8/fp8_e4m3: e4m3 bytes in a uint8 cache, written by reshape_and_cache
+    # with the layer's per-tensor scales and dequantized on load inside the QSA
+    # Triton kernel. flash-attn never runs over these caches, so its fp8 probe
+    # does not apply (see supports_kv_cache_dtype and the impl constructor).
     supported_kv_cache_dtypes: ClassVar[list[CacheDType]] = [
-        "auto", "bfloat16", "int8_per_token_head", "fp8_per_token_head"]
+        "auto",
+        "bfloat16",
+        "int8_per_token_head",
+        "fp8_per_token_head",
+        "fp8",
+        "fp8_e4m3",
+    ]
+
+    @classmethod
+    def supports_kv_cache_dtype(cls, kv_cache_dtype: CacheDType | None) -> bool:
+        return kv_cache_dtype is None or kv_cache_dtype in cls.supported_kv_cache_dtypes
+
+    @classmethod
+    def supports_combination(
+        cls,
+        head_size: int,
+        dtype: torch.dtype,
+        kv_cache_dtype: CacheDType | None,
+        block_size: int | None,
+        use_mla: bool,
+        has_sink: bool,
+        use_sparse: bool,
+        use_mm_prefix: bool,
+        device_capability: DeviceCapability,
+    ) -> str | None:
+        # QSA dequantizes the fp8 KV in its own Triton kernel and never runs
+        # flash-attn over the quantized cache, so the parent fp8-KV rejection
+        # does not apply; hand it an unquantized dtype to skip only that check.
+        if kv_cache_dtype in ("fp8", "fp8_e4m3"):
+            kv_cache_dtype = "auto"
+        return super().supports_combination(
+            head_size,
+            dtype,
+            kv_cache_dtype,
+            block_size,
+            use_mla,
+            has_sink,
+            use_sparse,
+            use_mm_prefix,
+            device_capability,
+        )
 
     @staticmethod
     def get_name() -> str:
@@ -99,18 +144,21 @@ class Qwen3_8FlashNextQSAFlashAttentionImpl(FlashAttentionImpl):
     supports_pcp: bool = False
 
     def __init__(self, *args, **kwargs) -> None:
-        # FlashAttention's constructor rejects per-token-head KV dtypes; QSA never uses its cache kernels,
-        # so build the base with "auto" and keep the real dtype for our own write/attention paths.
-        args = list(args)
-        if len(args) > 6:
-            real_dtype = args[6]
-            if real_dtype in ("int8_per_token_head", "fp8_per_token_head"):
-                args[6] = "auto"
+        # FlashAttention's constructor probes quantized-KV support and rejects
+        # the per-token-head and per-tensor fp8 dtypes on cache paths QSA never
+        # uses (it dequantizes inside its own Triton kernel). Build the base
+        # with "auto" and keep the real dtype for our write/attention paths.
+        arg_list = list(args)
+        _quant_dtypes = ("int8_per_token_head", "fp8_per_token_head", "fp8", "fp8_e4m3")
+        if len(arg_list) > 6:
+            real_dtype = arg_list[6]
+            if real_dtype in _quant_dtypes:
+                arg_list[6] = "auto"
         else:
             real_dtype = kwargs.get("kv_cache_dtype", "auto")
-            if real_dtype in ("int8_per_token_head", "fp8_per_token_head"):
+            if real_dtype in _quant_dtypes:
                 kwargs["kv_cache_dtype"] = "auto"
-        super().__init__(*args, **kwargs)
+        super().__init__(*arg_list, **kwargs)
         self.kv_cache_dtype = real_dtype
         if not is_flash_attn_varlen_func_available():
             raise NotImplementedError("Qwen3.8-Flash-Next QSA requires FlashAttention")
@@ -118,9 +166,17 @@ class Qwen3_8FlashNextQSAFlashAttentionImpl(FlashAttentionImpl):
             raise NotImplementedError(
                 "Qwen3.8-Flash-Next QSA does not support decode context parallelism"
             )
-        if self.kv_cache_dtype not in ("auto", "bfloat16", *("int8_per_token_head", "fp8_per_token_head")):
+        if self.kv_cache_dtype not in (
+            "auto",
+            "bfloat16",
+            "fp8",
+            "fp8_e4m3",
+            "int8_per_token_head",
+            "fp8_per_token_head",
+        ):
             raise NotImplementedError(
-                "Qwen3.8-Flash-Next QSA requires a BF16 or per-token-head int8/fp8 main KV cache"
+                "Qwen3.8-Flash-Next QSA requires a BF16, per-tensor fp8, or "
+                "per-token-head int8/fp8 main KV cache"
             )
         self.supports_quant_query_input = False
         self._pth = self.kv_cache_dtype in ("int8_per_token_head", "fp8_per_token_head")
@@ -194,10 +250,23 @@ class Qwen3_8FlashNextQSAFlashAttentionImpl(FlashAttentionImpl):
             key_cache, value_cache, k_scale, v_scale = self._pth_caches(kv_cache)
         else:
             key_cache, value_cache = kv_cache.transpose(1, 2).split(self.head_size, dim=-1)
+            if self.kv_cache_dtype in ("fp8", "fp8_e4m3"):
+                # The cache is allocated as uint8; reinterpret the e4m3 bytes
+                # (same itemsize, so shape and strides are preserved).
+                key_cache = key_cache.view(torch.float8_e4m3fn)
+                value_cache = value_cache.view(torch.float8_e4m3fn)
+                k_scale = layer._k_scale_float
+                v_scale = layer._v_scale_float
         key_cache = canonicalize_singleton_dim_strides(key_cache)
         value_cache = canonicalize_singleton_dim_strides(value_cache)
-        if query.dtype != torch.bfloat16 or (not self._pth and key_cache.dtype != torch.bfloat16):
-            raise NotImplementedError("Qwen3.8-Flash-Next QSA requires BF16 Q/K/V")
+        if query.dtype != torch.bfloat16 or (
+            not self._pth
+            and key_cache.dtype not in (torch.bfloat16, torch.float8_e4m3fn)
+        ):
+            raise NotImplementedError(
+                "Qwen3.8-Flash-Next QSA requires BF16 Q and BF16, fp8-e4m3, "
+                "or per-token-head K/V"
+            )
 
         from .ops.qsa import qsa_sparse_paged_attention
 
@@ -238,9 +307,17 @@ class Qwen3_8FlashNextQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             raise ValueError("Qwen3.8-Flash-Next QSA requires a paged KV cache")
         if model_config.dtype != torch.bfloat16:
             raise NotImplementedError("Qwen3.8-Flash-Next QSA currently requires BF16")
-        if cache_config.cache_dtype not in ("auto", "bfloat16", *("int8_per_token_head", "fp8_per_token_head")):
+        if cache_config.cache_dtype not in (
+            "auto",
+            "bfloat16",
+            "fp8",
+            "fp8_e4m3",
+            "int8_per_token_head",
+            "fp8_per_token_head",
+        ):
             raise NotImplementedError(
-                "Qwen3.8-Flash-Next QSA requires a BF16 or per-token-head int8/fp8 main KV cache"
+                "Qwen3.8-Flash-Next QSA requires a BF16, per-tensor fp8, or "
+                "per-token-head int8/fp8 main KV cache"
             )
         if getattr(quant_config, "kv_cache_scheme", None) is not None:
             raise NotImplementedError(
@@ -341,9 +418,11 @@ class Qwen3_8FlashNextQSAAttention(Qwen3NextAttention, AttentionLayerBase):
         self.kv_cache_torch_dtype = kv_cache_dtype_str_to_dtype(
             self.kv_cache_dtype, model_config
         )
-        if self.kv_cache_torch_dtype != torch.bfloat16 and self.kv_cache_dtype not in ("int8_per_token_head", "fp8_per_token_head"):
+        if self.kv_cache_torch_dtype not in (torch.bfloat16, torch.uint8) and (
+            self.kv_cache_dtype not in ("int8_per_token_head", "fp8_per_token_head")
+        ):
             raise NotImplementedError(
-                "Qwen3.8-Flash-Next QSA requires BF16 cache storage"
+                "Qwen3.8-Flash-Next QSA requires BF16 or FP8-e4m3 (uint8) cache storage"
             )
         self.kv_sharing_target_layer_name = None
         self.kv_cache = torch.tensor([])
